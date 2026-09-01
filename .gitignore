@@ -1,2 +1,8 @@
 
 glb_files/
+inspect_glb.py
+inspect_multiple.py
+inspect_output.py
+test.py
+test_scaling.py
+test_trimesh_normals.py
