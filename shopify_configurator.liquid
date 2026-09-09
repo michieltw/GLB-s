@@ -1,0 +1,282 @@
+<div class="hockey-stick-configurator">
+  <div class="configurator-layout">
+    <!-- 3D Viewer Section -->
+    <div class="viewer-section">
+      <model-viewer
+        id="stick-model-viewer"
+        src="{{ 'P28-ST.glb' | file_url }}"
+        alt="3D model of a hockey stick"
+        auto-rotate
+        camera-controls
+        shadow-intensity="1"
+        exposure="1"
+        environment-image="legacy"
+        style="width: 100%; height: 600px; background-color: #f4f4f4; border-radius: 8px;"
+      >
+        <div class="loading-poster" slot="poster">Laden...</div>
+      </model-viewer>
+    </div>
+
+    <!-- Options Section -->
+    <div class="options-section">
+      <h2>Configureer je stick</h2>
+
+      <div class="option-group">
+        <label for="curve-select">Curve</label>
+        <select id="curve-select" class="config-select">
+          <option value="P02">P02</option>
+          <option value="P28" selected>P28</option>
+          <option value="P88">P88</option>
+          <option value="P92">P92</option>
+          <option value="P90TM">P90TM</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="hand-select">Hand</label>
+        <select id="hand-select" class="config-select">
+          <option value="Links">Links (Left)</option>
+          <option value="Rechts">Rechts (Right)</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="flex-select">Flex</label>
+        <select id="flex-select" class="config-select">
+          <option value="55">55</option>
+          <option value="65">65</option>
+          <option value="75" selected>75</option>
+          <option value="85">85</option>
+          <option value="95">95</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="kickpoint-select">Kickpoint</label>
+        <select id="kickpoint-select" class="config-select">
+          <option value="Low">Low</option>
+          <option value="Mid" selected>Mid</option>
+          <option value="High">High</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="color-select">Kleur</label>
+        <select id="color-select" class="config-select">
+          <option value="Zwart">Zwart (Black)</option>
+          <option value="Wit">Wit (White)</option>
+          <option value="Zilver">Zilver (Silver)</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="texture-select">Textuur</label>
+        <select id="texture-select" class="config-select">
+          <option value="Matte" selected>Matte</option>
+          <option value="Glossy">Glossy</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="grip-select">Grip</label>
+        <select id="grip-select" class="config-select">
+          <option value="Ja" selected>Ja</option>
+          <option value="Nee">Nee</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="blad-texture-select">Blad textuur</label>
+        <select id="blad-texture-select" class="config-select">
+          <option value="Standard">Standard</option>
+          <option value="Sandpaper">Sandpaper</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="length-select">Lengte</label>
+        <select id="length-select" class="config-select">
+          <option value="60">60"</option>
+          <option value="62" selected>62"</option>
+          <option value="64">64"</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="weight-select">Gewicht</label>
+        <select id="weight-select" class="config-select">
+          <option value="375g">375g</option>
+          <option value="390g">390g</option>
+          <option value="415g">415g</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="age-class-select">Leeftijdsklasse</label>
+        <select id="age-class-select" class="config-select">
+          <option value="Youth">Youth</option>
+          <option value="Junior">Junior</option>
+          <option value="Intermediate">Intermediate</option>
+          <option value="Senior" selected>Senior</option>
+        </select>
+      </div>
+
+      <div class="selected-info">
+        <p>Geselecteerde configuratie: <span id="current-filename">P28-ST.glb</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .hockey-stick-configurator {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    font-family: inherit; /* Inherits from Horizon theme */
+  }
+
+  .configurator-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  @media (min-width: 768px) {
+    .configurator-layout {
+      flex-direction: row;
+      align-items: flex-start;
+    }
+  }
+
+  .viewer-section {
+    flex: 1 1 60%;
+    position: sticky;
+    top: 2rem;
+  }
+
+  .options-section {
+    flex: 1 1 40%;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  }
+
+  .options-section h2 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+  }
+
+  .option-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .option-group label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+  }
+
+  .config-select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    background-color: #fafafa;
+  }
+
+  .selected-info {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+    font-size: 0.9rem;
+    color: #666;
+  }
+
+  .loading-poster {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.2rem;
+    color: #555;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Select all our configuration dropdowns
+    const selects = {
+      curve: document.getElementById('curve-select'),
+      hand: document.getElementById('hand-select'),
+      flex: document.getElementById('flex-select'),
+      kickpoint: document.getElementById('kickpoint-select'),
+      color: document.getElementById('color-select'),
+      texture: document.getElementById('texture-select'),
+      grip: document.getElementById('grip-select'),
+      bladTexture: document.getElementById('blad-texture-select'),
+      length: document.getElementById('length-select'),
+      weight: document.getElementById('weight-select'),
+      ageClass: document.getElementById('age-class-select')
+    };
+
+    const modelViewer = document.getElementById('stick-model-viewer');
+    const filenameDisplay = document.getElementById('current-filename');
+
+    // We use a liquid variable to get the base URL for files in Shopify
+    // By passing a dummy string, we get the structure of the CDN link
+    // and we can replace the dummy filename in JS.
+    const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
+
+    function updateModel() {
+      // Gather all current values
+      const vals = {
+        curve: selects.curve.value,
+        hand: selects.hand.value,
+        flex: selects.flex.value,
+        kickpoint: selects.kickpoint.value,
+        color: selects.color.value,
+        texture: selects.texture.value,
+        grip: selects.grip.value,
+        bladTexture: selects.bladTexture.value,
+        length: selects.length.value,
+        weight: selects.weight.value,
+        ageClass: selects.ageClass.value
+      };
+
+      // Map configuration to the 3D files available in the database.
+      // Based on Hockey Curve DB, models use Curve and a variant mapping.
+      // For this dynamic configurator, we build a generalized filename.
+      // Example implementation: map Junior age class to JR variant, else standard ST.
+      let variantCode = 'ST';
+      if (vals.ageClass === 'Junior' || vals.ageClass === 'Youth') {
+          variantCode = 'JR'; // Mapping simplification for example
+      }
+
+      // Construct GLB filename (e.g. P28-ST.glb or P28-SBO-JR.glb)
+      const filename = `${vals.curve}-${variantCode}.glb`;
+
+      // Update display text to show what the user selected + filename
+      filenameDisplay.textContent = `${filename} (Hand: ${vals.hand}, Flex: ${vals.flex})`;
+
+      // Create new URL by replacing the dummy part
+      const newUrl = baseUrlTemplate.replace('DUMMY_FILE.glb', filename);
+
+      // Update the model viewer source
+      modelViewer.src = newUrl;
+    }
+
+    // Add event listeners to all select elements
+    Object.values(selects).forEach(selectElement => {
+      if(selectElement) {
+        selectElement.addEventListener('change', updateModel);
+      }
+    });
+
+    // Initialize once
+    updateModel();
+  });
+</script>
