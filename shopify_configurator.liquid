@@ -1,3 +1,6 @@
+<!-- Laad de model-viewer bibliotheek in (indien nog niet elders in het thema geladen) -->
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
 <div class="hockey-stick-configurator">
   <div class="configurator-layout">
     <!-- 3D Viewer Section -->
@@ -262,12 +265,57 @@
       // Update display text to show what the user selected + filename
       filenameDisplay.textContent = `${filename} (Hand: ${vals.hand}, Flex: ${vals.flex})`;
 
-      // Create new URL by replacing the dummy part
+      // Only change src if the filename is different to prevent unnecessary reloads
       const newUrl = baseUrlTemplate.replace('DUMMY_FILE.glb', filename);
+      if (!modelViewer.src || !modelViewer.src.includes(filename)) {
+        modelViewer.src = newUrl;
+      }
 
-      // Update the model viewer source
-      modelViewer.src = newUrl;
+      // Handle Left/Right mirroring and Length scaling via the model-viewer scale property.
+      // Assuming original models are Left ("Links") and 60 inches long.
+      let scaleX = 1;
+      if (vals.hand === 'Rechts') {
+        scaleX = -1; // Flip X-axis to mirror the blade
+      }
+
+      let scaleY = 1;
+      if (vals.length === '62') {
+        scaleY = 1.033; // 62 / 60
+      } else if (vals.length === '64') {
+        scaleY = 1.066; // 64 / 60
+      }
+
+      // Apply the scale to the model-viewer
+      modelViewer.scale = `${scaleX} ${scaleY} 1`;
+
+      // Apply color dynamically using model-viewer materials API
+      // Note: This applies once the model is loaded, so we also need a load listener.
+      applyColorToModel(vals.color);
     }
+
+    function applyColorToModel(colorName) {
+      if (!modelViewer.model || !modelViewer.model.materials) return;
+
+      // Determine RGBA values based on selection (4 elements required by API)
+      let rgba = [0.1, 0.1, 0.1, 1]; // Default Zwart
+      if (colorName === 'Wit') {
+        rgba = [0.9, 0.9, 0.9, 1];
+      } else if (colorName === 'Zilver') {
+        rgba = [0.6, 0.6, 0.6, 1];
+      }
+
+      // Assuming the stick shaft is the first material.
+      // If there are multiple materials (e.g. blade, grip), you might need to iterate.
+      const material = modelViewer.model.materials[0];
+      if (material) {
+        material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+      }
+    }
+
+    // When the model finishes loading a new src, ensure the current color is applied
+    modelViewer.addEventListener('load', function() {
+      applyColorToModel(selects.color.value);
+    });
 
     // Add event listeners to all select elements
     Object.values(selects).forEach(selectElement => {
