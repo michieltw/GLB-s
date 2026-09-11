@@ -132,6 +132,12 @@
       <div class="selected-info">
         <p>Geselecteerde configuratie: <span id="current-filename">P28-ST.glb</span></p>
       </div>
+
+      <div class="build-code-section">
+        <label>Jouw unieke Build Code:</label>
+        <div class="build-code-display" id="build-code-display">P28-L-75-MID-ZW-MAT-Y-STD-62-375-SR</div>
+        <small>Gebruik deze code bij je bestelling of voor referentie.</small>
+      </div>
     </div>
   </div>
 </div>
@@ -204,6 +210,37 @@
     color: #666;
   }
 
+  .build-code-section {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border: 1px dashed #ccc;
+    border-radius: 6px;
+    text-align: center;
+  }
+
+  .build-code-section label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: #333;
+  }
+
+  .build-code-display {
+    font-family: monospace;
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: #000;
+    letter-spacing: 1px;
+    margin-bottom: 0.5rem;
+    word-break: break-all;
+  }
+
+  .build-code-section small {
+    color: #777;
+    font-size: 0.8rem;
+  }
+
   .loading-poster {
     position: absolute;
     top: 50%;
@@ -233,6 +270,7 @@
 
     const modelViewer = document.getElementById('stick-model-viewer');
     const filenameDisplay = document.getElementById('current-filename');
+    const buildCodeDisplay = document.getElementById('build-code-display');
 
     // We use a liquid variable to get the base URL for files in Shopify
     // By passing a dummy string, we get the structure of the CDN link
@@ -269,6 +307,22 @@
 
       // Update display text to show what the user selected + filename
       filenameDisplay.textContent = `${filename} (Hand: ${vals.hand}, Flex: ${vals.flex})`;
+
+      // Generate and display Build Code
+      const buildCodeParts = [
+        vals.curve,
+        vals.hand === 'Links' ? 'L' : 'R',
+        vals.flex,
+        vals.kickpoint.toUpperCase(),
+        vals.color.substring(0, 2).toUpperCase(), // ZW, WI, ZI, RO, BL, GR, GE, OR
+        vals.texture === 'Matte' ? 'MAT' : 'GLO',
+        vals.grip === 'Ja' ? 'Y' : 'N',
+        vals.bladTexture === 'Standard' ? 'STD' : 'SND',
+        vals.length,
+        vals.weight.replace('g', ''),
+        vals.ageClass === 'Senior' ? 'SR' : (vals.ageClass === 'Junior' ? 'JR' : (vals.ageClass === 'Youth' ? 'YTH' : 'INT'))
+      ];
+      buildCodeDisplay.textContent = buildCodeParts.join('-');
 
       // Only change src if the filename is different to prevent unnecessary reloads
       const newUrl = baseUrlTemplate.replace('DUMMY_FILE.glb', filename);
