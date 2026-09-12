@@ -149,6 +149,16 @@
         </select>
       </div>
 
+      <div class="option-group">
+        <label for="custom-name-input">Custom Naam (Optioneel)</label>
+        <input type="text" id="custom-name-input" class="config-select config-input" placeholder="Bijv. JANSEN" maxlength="15">
+      </div>
+
+      <div class="option-group">
+        <label for="custom-number-input">Nummer (Optioneel)</label>
+        <input type="text" id="custom-number-input" class="config-select config-input" placeholder="Bijv. 99" maxlength="2">
+      </div>
+
       <div class="selected-info">
         <p>Geselecteerde configuratie: <span id="current-filename">P28-ST.glb</span></p>
       </div>
@@ -213,13 +223,14 @@
     margin-bottom: 0.5rem;
   }
 
-  .config-select {
+  .config-select, .config-input {
     width: 100%;
     padding: 0.75rem;
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 1rem;
     background-color: #fafafa;
+    box-sizing: border-box;
   }
 
   .selected-info {
@@ -287,7 +298,9 @@
       weight: document.getElementById('weight-select'),
       ageClass: document.getElementById('age-class-select'),
       shaftShape: document.getElementById('shaft-shape-select'),
-      quantity: document.getElementById('quantity-select')
+      quantity: document.getElementById('quantity-select'),
+      customName: document.getElementById('custom-name-input'),
+      customNumber: document.getElementById('custom-number-input')
     };
 
     const modelViewer = document.getElementById('stick-model-viewer');
@@ -314,7 +327,9 @@
         weight: selects.weight.value,
         ageClass: selects.ageClass.value,
         shaftShape: selects.shaftShape.value,
-        quantity: selects.quantity.value
+        quantity: selects.quantity.value,
+        customName: selects.customName.value,
+        customNumber: selects.customNumber.value
       };
 
       // Map configuration to the 3D files available in the database.
@@ -347,6 +362,15 @@
         vals.ageClass === 'Senior' ? 'SR' : (vals.ageClass === 'Junior' ? 'JR' : (vals.ageClass === 'Youth' ? 'YTH' : 'INT')),
         vals.shaftShape === 'Square' ? 'SQ' : 'RD'
       ];
+
+      // Conditionally add Custom Name and Number to Build Code
+      if (vals.customName.trim() !== '') {
+        buildCodeParts.push(vals.customName.trim().toUpperCase());
+      }
+      if (vals.customNumber.trim() !== '') {
+        buildCodeParts.push(vals.customNumber.trim());
+      }
+
       buildCodeDisplay.textContent = buildCodeParts.join('-');
 
       // Only change src if the filename is different to prevent unnecessary reloads
@@ -411,10 +435,11 @@
       applyColorToModel(selects.color.value);
     });
 
-    // Add event listeners to all select elements
-    Object.values(selects).forEach(selectElement => {
-      if(selectElement) {
-        selectElement.addEventListener('change', updateModel);
+    // Add event listeners to all select and input elements
+    Object.values(selects).forEach(element => {
+      if(element) {
+        // Use 'input' for text fields to update instantly as the user types
+        element.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', updateModel);
       }
     });
 
