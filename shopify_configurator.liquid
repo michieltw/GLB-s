@@ -1,20 +1,21 @@
 <!-- Laad de model-viewer bibliotheek in (indien nog niet elders in het thema geladen) -->
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
 
-<div class="hockey-stick-configurator">
+<div class="hockey-stick-configurator" data-section-id="{{ section.id }}">
   <div class="configurator-layout">
+
     <!-- 3D Viewer Section -->
     <div class="viewer-section">
       <model-viewer
-        id="stick-model-viewer"
-        src="{{ 'P28-ST.glb' | file_url }}"
-        alt="3D model of a hockey stick"
+        id="stick-model-viewer-{{ section.id }}"
+        src="{{ 'DUMMY_FILE.glb' | file_url }}"
+        alt="3D model configurator"
         auto-rotate
         camera-controls
         shadow-intensity="1"
         exposure="1"
         environment-image="legacy"
-        style="width: 100%; height: 600px; background-color: #f4f4f4; border-radius: 8px;"
+        style="width: 100%; height: 600px; background-color: {{ section.settings.viewer_bg_color | default: '#f4f4f4' }}; border-radius: 8px;"
       >
         <div class="loading-poster" slot="poster">Laden...</div>
       </model-viewer>
@@ -22,152 +23,54 @@
 
     <!-- Options Section -->
     <div class="options-section">
-      <h2>Configureer je stick</h2>
+      <h2>{{ section.settings.title | default: 'Configureer je stick' }}</h2>
 
-      <div class="option-group">
-        <label for="curve-select">Curve</label>
-        <select id="curve-select" class="config-select">
-          <option value="P02">P02</option>
-          <option value="P28" selected>P28</option>
-          <option value="P88">P88</option>
-          <option value="P92">P92</option>
-          <option value="P90TM">P90TM</option>
-        </select>
+      <div id="dynamic-options-container-{{ section.id }}">
+        {% for block in section.blocks %}
+
+          <div class="option-group"
+               id="block-{{ block.id }}"
+               data-block-type="{{ block.type }}"
+               data-block-id="{{ block.id }}"
+               data-condition-trigger="{{ block.settings.condition_trigger }}"
+               data-condition-value="{{ block.settings.condition_value }}"
+               data-build-code-enabled="{{ block.settings.include_in_build_code }}"
+               data-model-action="{{ block.settings.model_action }}"
+               {% if block.settings.condition_trigger != blank %}style="display: none;"{% endif %}
+          >
+            <label for="input-{{ block.id }}">
+              {{ block.settings.title }}
+              {% if block.settings.image != blank %}
+                <img src="{{ block.settings.image | img_url: 'icon' }}" alt="" class="option-icon" width="20" height="20" style="vertical-align: middle; margin-left: 5px;">
+              {% endif %}
+            </label>
+
+            {% if block.type == 'select_option' %}
+              {% assign options = block.settings.options | split: ',' %}
+              <select id="input-{{ block.id }}" class="config-select dynamic-input" data-label="{{ block.settings.title | downcase | replace: ' ', '_' }}">
+                {% for option in options %}
+                  {% assign opt_parts = option | split: ':' %}
+                  {% assign opt_label = opt_parts[0] | strip %}
+                  {% assign opt_val = opt_parts[1] | default: opt_label | strip %}
+                  <option value="{{ opt_val }}">{{ opt_label }}</option>
+                {% endfor %}
+              </select>
+            {% elsif block.type == 'text_input' %}
+              <input type="text" id="input-{{ block.id }}" class="config-input dynamic-input" data-label="{{ block.settings.title | downcase | replace: ' ', '_' }}" placeholder="{{ block.settings.placeholder }}" maxlength="{{ block.settings.max_length | default: 50 }}">
+            {% endif %}
+          </div>
+
+        {% endfor %}
       </div>
 
-      <div class="option-group">
-        <label for="hand-select">Hand</label>
-        <select id="hand-select" class="config-select">
-          <option value="Links">Links (Left)</option>
-          <option value="Rechts">Rechts (Right)</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="flex-select">Flex</label>
-        <select id="flex-select" class="config-select">
-          <option value="55">55</option>
-          <option value="65">65</option>
-          <option value="75" selected>75</option>
-          <option value="85">85</option>
-          <option value="95">95</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="kickpoint-select">Kickpoint</label>
-        <select id="kickpoint-select" class="config-select">
-          <option value="Low">Low</option>
-          <option value="Mid" selected>Mid</option>
-          <option value="High">High</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="color-select">Kleur</label>
-        <select id="color-select" class="config-select">
-          <option value="Zwart">Zwart</option>
-          <option value="Wit">Wit</option>
-          <option value="Zilver">Zilver</option>
-          <option value="Rood">Rood</option>
-          <option value="Blauw">Blauw</option>
-          <option value="Groen">Groen</option>
-          <option value="Geel">Geel</option>
-          <option value="Oranje">Oranje</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="texture-select">Textuur</label>
-        <select id="texture-select" class="config-select">
-          <option value="Matte" selected>Matte</option>
-          <option value="Glossy">Glossy</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="grip-select">Grip</label>
-        <select id="grip-select" class="config-select">
-          <option value="Ja" selected>Ja</option>
-          <option value="Nee">Nee</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="blad-texture-select">Blad textuur</label>
-        <select id="blad-texture-select" class="config-select">
-          <option value="Standard">Standard</option>
-          <option value="Sandpaper">Sandpaper</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="length-select">Lengte</label>
-        <select id="length-select" class="config-select">
-          <option value="60">60"</option>
-          <option value="62" selected>62"</option>
-          <option value="64">64"</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="weight-select">Gewicht</label>
-        <select id="weight-select" class="config-select">
-          <option value="375g">375g</option>
-          <option value="390g">390g</option>
-          <option value="415g">415g</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="age-class-select">Leeftijdsklasse</label>
-        <select id="age-class-select" class="config-select">
-          <option value="Youth">Youth</option>
-          <option value="Junior">Junior</option>
-          <option value="Intermediate">Intermediate</option>
-          <option value="Senior" selected>Senior</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="shaft-shape-select">Shaft vorm</label>
-        <select id="shaft-shape-select" class="config-select">
-          <option value="Square" selected>Square (Standard)</option>
-          <option value="Round">Round</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="quantity-select">Aantal</label>
-        <select id="quantity-select" class="config-select">
-          <option value="1" selected>1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="10">10 (Team set)</option>
-        </select>
-      </div>
-
-      <div class="option-group">
-        <label for="custom-name-input">Custom Naam (Optioneel)</label>
-        <input type="text" id="custom-name-input" class="config-select config-input" placeholder="Bijv. JANSEN" maxlength="15">
-      </div>
-
-      <div class="option-group">
-        <label for="custom-number-input">Nummer (Optioneel)</label>
-        <input type="text" id="custom-number-input" class="config-select config-input" placeholder="Bijv. 99" maxlength="2">
-      </div>
-
-      <div class="selected-info">
-        <p>Geselecteerde configuratie: <span id="current-filename">P28-ST.glb</span></p>
-      </div>
-
+      {% if section.settings.show_build_code %}
       <div class="build-code-section">
-        <label>Jouw unieke Build Code:</label>
-        <div class="build-code-display" id="build-code-display">P28-L-75-MID-ZW-MAT-Y-STD-62-375-SR</div>
-        <small>Gebruik deze code bij je bestelling of voor referentie.</small>
+        <label>{{ section.settings.build_code_title | default: 'Jouw unieke Build Code:' }}</label>
+        <div class="build-code-display" id="build-code-display-{{ section.id }}">...</div>
+        <small>{{ section.settings.build_code_subtitle | default: 'Gebruik deze code bij je bestelling of voor referentie.' }}</small>
       </div>
+      {% endif %}
+
     </div>
   </div>
 </div>
@@ -177,28 +80,24 @@
     max-width: 1200px;
     margin: 0 auto;
     padding: 2rem;
-    font-family: inherit; /* Inherits from Horizon theme */
+    font-family: inherit;
   }
-
   .configurator-layout {
     display: flex;
     flex-direction: column;
     gap: 2rem;
   }
-
   @media (min-width: 768px) {
     .configurator-layout {
       flex-direction: row;
       align-items: flex-start;
     }
   }
-
   .viewer-section {
     flex: 1 1 60%;
     position: sticky;
     top: 2rem;
   }
-
   .options-section {
     flex: 1 1 40%;
     background: #fff;
@@ -206,23 +105,20 @@
     border-radius: 8px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
   }
-
   .options-section h2 {
     margin-top: 0;
     margin-bottom: 1.5rem;
     font-size: 1.5rem;
   }
-
   .option-group {
     margin-bottom: 1.5rem;
+    transition: all 0.3s ease;
   }
-
   .option-group label {
     display: block;
     font-weight: bold;
     margin-bottom: 0.5rem;
   }
-
   .config-select, .config-input {
     width: 100%;
     padding: 0.75rem;
@@ -232,15 +128,6 @@
     background-color: #fafafa;
     box-sizing: border-box;
   }
-
-  .selected-info {
-    margin-top: 2rem;
-    padding-top: 1rem;
-    border-top: 1px solid #eee;
-    font-size: 0.9rem;
-    color: #666;
-  }
-
   .build-code-section {
     margin-top: 1.5rem;
     padding: 1rem;
@@ -249,14 +136,12 @@
     border-radius: 6px;
     text-align: center;
   }
-
   .build-code-section label {
     display: block;
     font-weight: bold;
     margin-bottom: 0.5rem;
     color: #333;
   }
-
   .build-code-display {
     font-family: monospace;
     font-size: 1.25rem;
@@ -266,12 +151,10 @@
     margin-bottom: 0.5rem;
     word-break: break-all;
   }
-
   .build-code-section small {
     color: #777;
     font-size: 0.8rem;
   }
-
   .loading-poster {
     position: absolute;
     top: 50%;
@@ -284,166 +167,335 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    // Select all our configuration dropdowns
-    const selects = {
-      curve: document.getElementById('curve-select'),
-      hand: document.getElementById('hand-select'),
-      flex: document.getElementById('flex-select'),
-      kickpoint: document.getElementById('kickpoint-select'),
-      color: document.getElementById('color-select'),
-      texture: document.getElementById('texture-select'),
-      grip: document.getElementById('grip-select'),
-      bladTexture: document.getElementById('blad-texture-select'),
-      length: document.getElementById('length-select'),
-      weight: document.getElementById('weight-select'),
-      ageClass: document.getElementById('age-class-select'),
-      shaftShape: document.getElementById('shaft-shape-select'),
-      quantity: document.getElementById('quantity-select'),
-      customName: document.getElementById('custom-name-input'),
-      customNumber: document.getElementById('custom-number-input')
-    };
+    const sectionId = "{{ section.id }}";
+    const container = document.getElementById(`dynamic-options-container-${sectionId}`);
+    if (!container) return;
 
-    const modelViewer = document.getElementById('stick-model-viewer');
-    const filenameDisplay = document.getElementById('current-filename');
-    const buildCodeDisplay = document.getElementById('build-code-display');
+    const allInputs = container.querySelectorAll('.dynamic-input');
+    const allGroups = container.querySelectorAll('.option-group');
 
-    // We use a liquid variable to get the base URL for files in Shopify
-    // By passing a dummy string, we get the structure of the CDN link
-    // and we can replace the dummy filename in JS.
-    const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
+    function checkConditions() {
+      allGroups.forEach(group => {
+        const triggerLabel = group.getAttribute('data-condition-trigger');
+        const triggerValue = group.getAttribute('data-condition-value');
 
-    function updateModel() {
-      // Gather all current values
-      const vals = {
-        curve: selects.curve.value,
-        hand: selects.hand.value,
-        flex: selects.flex.value,
-        kickpoint: selects.kickpoint.value,
-        color: selects.color.value,
-        texture: selects.texture.value,
-        grip: selects.grip.value,
-        bladTexture: selects.bladTexture.value,
-        length: selects.length.value,
-        weight: selects.weight.value,
-        ageClass: selects.ageClass.value,
-        shaftShape: selects.shaftShape.value,
-        quantity: selects.quantity.value,
-        customName: selects.customName.value,
-        customNumber: selects.customNumber.value
-      };
+        if (triggerLabel && triggerLabel.trim() !== '') {
+          // Find the input that matches the trigger label
+          const formattedTriggerLabel = triggerLabel.toLowerCase().replace(/ /g, '_');
+          const triggerInput = container.querySelector(`.dynamic-input[data-label="${formattedTriggerLabel}"]`);
 
-      // Map configuration to the 3D files available in the database.
-      // Based on Hockey Curve DB, models use Curve and a variant mapping.
-      // For this dynamic configurator, we build a generalized filename.
-      // Example implementation: map Junior age class to JR variant, else standard ST.
-      let variantCode = 'ST';
-      if (vals.ageClass === 'Junior' || vals.ageClass === 'Youth') {
-          variantCode = 'JR'; // Mapping simplification for example
-      }
-
-      // Construct GLB filename (e.g. P28-ST.glb or P28-SBO-JR.glb)
-      const filename = `${vals.curve}-${variantCode}.glb`;
-
-      // Update display text to show what the user selected + filename
-      filenameDisplay.textContent = `${filename} (Hand: ${vals.hand}, Flex: ${vals.flex})`;
-
-      // Generate and display Build Code
-      const buildCodeParts = [
-        vals.curve,
-        vals.hand === 'Links' ? 'L' : 'R',
-        vals.flex,
-        vals.kickpoint.toUpperCase(),
-        vals.color.substring(0, 2).toUpperCase(), // ZW, WI, ZI, RO, BL, GR, GE, OR
-        vals.texture === 'Matte' ? 'MAT' : 'GLO',
-        vals.grip === 'Ja' ? 'Y' : 'N',
-        vals.bladTexture === 'Standard' ? 'STD' : 'SND',
-        vals.length,
-        vals.weight.replace('g', ''),
-        vals.ageClass === 'Senior' ? 'SR' : (vals.ageClass === 'Junior' ? 'JR' : (vals.ageClass === 'Youth' ? 'YTH' : 'INT')),
-        vals.shaftShape === 'Square' ? 'SQ' : 'RD'
-      ];
-
-      // Conditionally add Custom Name and Number to Build Code
-      if (vals.customName.trim() !== '') {
-        buildCodeParts.push(vals.customName.trim().toUpperCase());
-      }
-      if (vals.customNumber.trim() !== '') {
-        buildCodeParts.push(vals.customNumber.trim());
-      }
-
-      buildCodeDisplay.textContent = buildCodeParts.join('-');
-
-      // Only change src if the filename is different to prevent unnecessary reloads
-      const newUrl = baseUrlTemplate.replace('DUMMY_FILE.glb', filename);
-      if (!modelViewer.src || !modelViewer.src.includes(filename)) {
-        modelViewer.src = newUrl;
-      }
-
-      // Handle Left/Right mirroring and Length scaling via the model-viewer scale property.
-      // Assuming original models are Left ("Links") and 60 inches long.
-      let scaleX = 1;
-      if (vals.hand === 'Rechts') {
-        scaleX = -1; // Flip X-axis to mirror the blade
-      }
-
-      let scaleY = 1;
-      if (vals.length === '62') {
-        scaleY = 1.033; // 62 / 60
-      } else if (vals.length === '64') {
-        scaleY = 1.066; // 64 / 60
-      }
-
-      // Apply the scale to the model-viewer
-      modelViewer.scale = `${scaleX} ${scaleY} 1`;
-
-      // Apply color dynamically using model-viewer materials API
-      // Note: This applies once the model is loaded, so we also need a load listener.
-      applyColorToModel(vals.color);
+          if (triggerInput) {
+            // Check if current value matches the required value (or if any value is fine)
+            if (triggerInput.value === triggerValue || triggerValue === '') {
+              group.style.display = 'block';
+            } else {
+              group.style.display = 'none';
+            }
+          }
+        }
+      });
     }
 
-    function applyColorToModel(colorName) {
-      if (!modelViewer.model || !modelViewer.model.materials) return;
-
-      // Determine RGBA values based on selection (4 elements required by API)
-      let rgba = [0.1, 0.1, 0.1, 1]; // Default Zwart
-      if (colorName === 'Wit') {
-        rgba = [0.9, 0.9, 0.9, 1];
-      } else if (colorName === 'Zilver') {
-        rgba = [0.6, 0.6, 0.6, 1];
-      } else if (colorName === 'Rood') {
-        rgba = [0.8, 0.1, 0.1, 1];
-      } else if (colorName === 'Blauw') {
-        rgba = [0.1, 0.2, 0.8, 1];
-      } else if (colorName === 'Groen') {
-        rgba = [0.1, 0.7, 0.2, 1];
-      } else if (colorName === 'Geel') {
-        rgba = [0.9, 0.8, 0.1, 1];
-      } else if (colorName === 'Oranje') {
-        rgba = [0.9, 0.4, 0.1, 1];
-      }
-
-      // Assuming the stick shaft is the first material.
-      // If there are multiple materials (e.g. blade, grip), you might need to iterate.
-      const material = modelViewer.model.materials[0];
-      if (material) {
-        material.pbrMetallicRoughness.setBaseColorFactor(rgba);
-      }
-    }
-
-    // When the model finishes loading a new src, ensure the current color is applied
-    modelViewer.addEventListener('load', function() {
-      applyColorToModel(selects.color.value);
+    // Attach listeners
+    allInputs.forEach(input => {
+      input.addEventListener(input.tagName === 'INPUT' ? 'input' : 'change', function() {
+        checkConditions();
+        // Custom event so the build code and model update script knows a change happened
+        document.dispatchEvent(new CustomEvent(`configurator-updated-${sectionId}`));
+      });
     });
 
-    // Add event listeners to all select and input elements
-    Object.values(selects).forEach(element => {
-      if(element) {
-        // Use 'input' for text fields to update instantly as the user types
-        element.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', updateModel);
-      }
-    });
-
-    // Initialize once
-    updateModel();
+    // Initial check
+    checkConditions();
   });
 </script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const sectionId = "{{ section.id }}";
+    const container = document.getElementById(`dynamic-options-container-${sectionId}`);
+    const modelViewer = document.getElementById(`stick-model-viewer-${sectionId}`);
+    const buildCodeDisplay = document.getElementById(`build-code-display-${sectionId}`);
+
+    if (!container || !modelViewer) return;
+
+    const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
+
+    // Convert hex or named colors to RGBA array for model-viewer
+    function parseColor(colorValue) {
+      const colors = {
+        'Zwart': [0.1, 0.1, 0.1, 1],
+        'Wit': [0.9, 0.9, 0.9, 1],
+        'Zilver': [0.6, 0.6, 0.6, 1],
+        'Rood': [0.8, 0.1, 0.1, 1],
+        'Blauw': [0.1, 0.2, 0.8, 1],
+        'Groen': [0.1, 0.7, 0.2, 1],
+        'Geel': [0.9, 0.8, 0.1, 1],
+        'Oranje': [0.9, 0.4, 0.1, 1]
+      };
+
+      if (colors[colorValue]) return colors[colorValue];
+
+      // Basic hex parsing if admin provides a hex code #RRGGBB
+      if (colorValue.startsWith('#') && colorValue.length === 7) {
+        const r = parseInt(colorValue.slice(1, 3), 16) / 255;
+        const g = parseInt(colorValue.slice(3, 5), 16) / 255;
+        const b = parseInt(colorValue.slice(5, 7), 16) / 255;
+        return [r, g, b, 1];
+      }
+      return null;
+    }
+
+    function updateConfigurator() {
+      const allGroups = container.querySelectorAll('.option-group');
+      let buildCodeParts = [];
+      let glbFilenameBase = '';
+
+      let scaleX = 1;
+      let scaleY = 1;
+      let activeColor = null;
+
+      // 1. Loop through all configured blocks to determine state
+      allGroups.forEach(group => {
+        // Skip processing if the block is conditionally hidden by the other script
+        if (group.style.display === 'none') return;
+
+        const input = group.querySelector('.dynamic-input');
+        if (!input) return;
+
+        const val = input.value.trim();
+        const action = group.getAttribute('data-model-action');
+        const includeInCode = group.getAttribute('data-build-code-enabled') === 'true';
+
+        // Add to build code if enabled and value isn't empty
+        if (includeInCode && val !== '') {
+          // Format standard options to shortcodes, keep text inputs as is
+          let codeStr = val;
+          if (input.tagName === 'SELECT') {
+            // Very simple abbreviation generator for options
+            if (val.length <= 4) {
+               codeStr = val.toUpperCase();
+            } else if (val.includes(' ')) {
+               codeStr = val.split(' ').map(w => w[0]).join('').toUpperCase();
+            } else {
+               codeStr = val.substring(0, 3).toUpperCase();
+            }
+          } else {
+             codeStr = val.toUpperCase(); // For text inputs like custom name
+          }
+          buildCodeParts.push(codeStr);
+        }
+
+        // Apply 3D model actions based on the block's configured behavior
+        if (action === 'set_filename') {
+          // E.g. Curve sets the base file "P28"
+          glbFilenameBase = glbFilenameBase ? `${glbFilenameBase}-${val}` : val;
+        } else if (action === 'mirror_x') {
+          // Specifically handles Left/Right where R/Rechts mirrors
+          if (val.toUpperCase().startsWith('R')) scaleX = -1;
+        } else if (action === 'scale_y') {
+          // Specifically handles Length in inches (60 is base)
+          const inches = parseFloat(val);
+          if (!isNaN(inches) && inches > 0) {
+            scaleY = inches / 60.0;
+          }
+        } else if (action === 'color') {
+          activeColor = parseColor(val);
+        }
+      });
+
+      // 2. Output Build Code
+      if (buildCodeDisplay) {
+        buildCodeDisplay.textContent = buildCodeParts.join('-') || '...';
+      }
+
+      // 3. Update Model Viewer Src
+      if (glbFilenameBase) {
+        // Assume ST (Standard) variant as fallback if admin didn't map a variant block
+        const filename = `${glbFilenameBase}.glb`;
+        const newUrl = baseUrlTemplate.replace('DUMMY_FILE.glb', filename);
+        if (!modelViewer.src || !modelViewer.src.includes(filename)) {
+          modelViewer.src = newUrl;
+        }
+      }
+
+      // 4. Update Model Viewer Scale
+      modelViewer.scale = `${scaleX} ${scaleY} 1`;
+
+      // 5. Update Model Viewer Color
+      if (activeColor && modelViewer.model && modelViewer.model.materials) {
+        const material = modelViewer.model.materials[0];
+        if (material) {
+          material.pbrMetallicRoughness.setBaseColorFactor(activeColor);
+        }
+      }
+
+      // Store current color so the load event can re-apply it if src changes
+      modelViewer.dataset.currentColorStr = activeColor ? JSON.stringify(activeColor) : "";
+    }
+
+    // When model source finishes loading, re-apply the tint color
+    modelViewer.addEventListener('load', function() {
+      if (modelViewer.dataset.currentColorStr && modelViewer.model && modelViewer.model.materials) {
+        const material = modelViewer.model.materials[0];
+        if (material) {
+           const colorArr = JSON.parse(modelViewer.dataset.currentColorStr);
+           material.pbrMetallicRoughness.setBaseColorFactor(colorArr);
+        }
+      }
+    });
+
+    // Listen for the custom event fired by the conditional logic script
+    document.addEventListener(`configurator-updated-${sectionId}`, updateConfigurator);
+
+    // Initial update
+    updateConfigurator();
+  });
+</script>
+
+{% schema %}
+{
+  "name": "3D Configurator",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Titel",
+      "default": "Configureer je stick"
+    },
+    {
+      "type": "color",
+      "id": "viewer_bg_color",
+      "label": "Achtergrondkleur 3D Viewer",
+      "default": "#f4f4f4"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_build_code",
+      "label": "Toon Build Code sectie",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "build_code_title",
+      "label": "Titel Build Code",
+      "default": "Jouw unieke Build Code:"
+    },
+    {
+      "type": "text",
+      "id": "build_code_subtitle",
+      "label": "Ondertitel Build Code",
+      "default": "Gebruik deze code bij je bestelling of voor referentie."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "select_option",
+      "name": "Keuzelijst (Select)",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Titel van de optie",
+          "info": "Bijv. 'Curve' of 'Kleur'"
+        },
+        {
+          "type": "textarea",
+          "id": "options",
+          "label": "Keuzes (komma-gescheiden)",
+          "info": "Formaat: Label:Waarde, Label2:Waarde2. Bijv. Zwart:ZW, Wit:WI, Links:L, Rechts:R"
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Icoontje (optioneel)"
+        },
+        {
+          "type": "checkbox",
+          "id": "include_in_build_code",
+          "label": "Meenemen in Build Code?",
+          "default": true
+        },
+        {
+          "type": "select",
+          "id": "model_action",
+          "label": "Actie op 3D Model",
+          "options": [
+            { "value": "none", "label": "Geen actie" },
+            { "value": "set_filename", "label": "Bepaalt bestandsnaam (hoofdmodel)" },
+            { "value": "mirror_x", "label": "Spiegel X-as (bij Rechts=R)" },
+            { "value": "scale_y", "label": "Schaal Y-as (Lengte in inches)" },
+            { "value": "color", "label": "Kleur 3D Materiaal (Hex/Naam)" }
+          ],
+          "default": "none"
+        },
+        {
+          "type": "header",
+          "content": "Conditionele Logica"
+        },
+        {
+          "type": "text",
+          "id": "condition_trigger",
+          "label": "Toon alleen als blok-titel...",
+          "info": "Typ exact de titel van een ander blok (bijv. 'Leeftijdsklasse'). Laat leeg om altijd te tonen."
+        },
+        {
+          "type": "text",
+          "id": "condition_value",
+          "label": "...deze waarde heeft",
+          "info": "Bijv. 'Senior'"
+        }
+      ]
+    },
+    {
+      "type": "text_input",
+      "name": "Tekst Invoerveld",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Titel",
+          "info": "Bijv. 'Naam' of 'Nummer'"
+        },
+        {
+          "type": "text",
+          "id": "placeholder",
+          "label": "Placeholder tekst"
+        },
+        {
+          "type": "number",
+          "id": "max_length",
+          "label": "Maximale lengte",
+          "default": 15
+        },
+        {
+          "type": "checkbox",
+          "id": "include_in_build_code",
+          "label": "Meenemen in Build Code?",
+          "default": true
+        },
+        {
+          "type": "header",
+          "content": "Conditionele Logica"
+        },
+        {
+          "type": "text",
+          "id": "condition_trigger",
+          "label": "Toon alleen als blok-titel..."
+        },
+        {
+          "type": "text",
+          "id": "condition_value",
+          "label": "...deze waarde heeft"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "3D Stick Configurator",
+      "category": "Product"
+    }
+  ]
+}
+{% endschema %}
