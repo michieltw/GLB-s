@@ -129,6 +129,26 @@
         </select>
       </div>
 
+      <div class="option-group">
+        <label for="shaft-shape-select">Shaft vorm</label>
+        <select id="shaft-shape-select" class="config-select">
+          <option value="Square" selected>Square (Standard)</option>
+          <option value="Round">Round</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="quantity-select">Aantal</label>
+        <select id="quantity-select" class="config-select">
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="10">10 (Team set)</option>
+        </select>
+      </div>
+
       <div class="selected-info">
         <p>Geselecteerde configuratie: <span id="current-filename">P28-ST.glb</span></p>
       </div>
@@ -265,7 +285,9 @@
       bladTexture: document.getElementById('blad-texture-select'),
       length: document.getElementById('length-select'),
       weight: document.getElementById('weight-select'),
-      ageClass: document.getElementById('age-class-select')
+      ageClass: document.getElementById('age-class-select'),
+      shaftShape: document.getElementById('shaft-shape-select'),
+      quantity: document.getElementById('quantity-select')
     };
 
     const modelViewer = document.getElementById('stick-model-viewer');
@@ -290,7 +312,9 @@
         bladTexture: selects.bladTexture.value,
         length: selects.length.value,
         weight: selects.weight.value,
-        ageClass: selects.ageClass.value
+        ageClass: selects.ageClass.value,
+        shaftShape: selects.shaftShape.value,
+        quantity: selects.quantity.value
       };
 
       // Map configuration to the 3D files available in the database.
@@ -320,7 +344,8 @@
         vals.bladTexture === 'Standard' ? 'STD' : 'SND',
         vals.length,
         vals.weight.replace('g', ''),
-        vals.ageClass === 'Senior' ? 'SR' : (vals.ageClass === 'Junior' ? 'JR' : (vals.ageClass === 'Youth' ? 'YTH' : 'INT'))
+        vals.ageClass === 'Senior' ? 'SR' : (vals.ageClass === 'Junior' ? 'JR' : (vals.ageClass === 'Youth' ? 'YTH' : 'INT')),
+        vals.shaftShape === 'Square' ? 'SQ' : 'RD'
       ];
       buildCodeDisplay.textContent = buildCodeParts.join('-');
 
