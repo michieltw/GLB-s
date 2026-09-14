@@ -25,7 +25,16 @@
     <div class="options-section">
       <h2>{{ section.settings.title | default: 'Configureer je stick' }}</h2>
 
-      <div id="dynamic-options-container-{{ section.id }}">
+      <form action="/cart/add" method="post" enctype="multipart/form-data" id="configurator-cart-form-{{ section.id }}">
+        <!-- Hidden input for the product variant ID.
+             If this section is used on a product page, it grabs the first available variant.
+             You can also configure this dynamically via the section settings if needed. -->
+        <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
+
+        <!-- Hidden input to store the generated Build Code as a Line Item Property -->
+        <input type="hidden" name="properties[Build Code]" id="hidden-build-code-{{ section.id }}" value="">
+
+        <div id="dynamic-options-container-{{ section.id }}">
         {% for block in section.blocks %}
 
           <div class="option-group"
@@ -47,7 +56,7 @@
 
             {% if block.type == 'select_option' %}
               {% assign options = block.settings.options | split: ',' %}
-              <select id="input-{{ block.id }}" class="config-select dynamic-input" data-label="{{ block.settings.title | downcase | replace: ' ', '_' }}">
+              <select id="input-{{ block.id }}" name="properties[{{ block.settings.title }}]" class="config-select dynamic-input" data-label="{{ block.settings.title | downcase | replace: ' ', '_' }}">
                 {% for option in options %}
                   {% assign opt_parts = option | split: ':' %}
                   {% assign opt_label = opt_parts[0] | strip %}
@@ -56,21 +65,29 @@
                 {% endfor %}
               </select>
             {% elsif block.type == 'text_input' %}
-              <input type="text" id="input-{{ block.id }}" class="config-input dynamic-input" data-label="{{ block.settings.title | downcase | replace: ' ', '_' }}" placeholder="{{ block.settings.placeholder }}" maxlength="{{ block.settings.max_length | default: 50 }}">
+              <input type="text" id="input-{{ block.id }}" name="properties[{{ block.settings.title }}]" class="config-input dynamic-input" data-label="{{ block.settings.title | downcase | replace: ' ', '_' }}" placeholder="{{ block.settings.placeholder }}" maxlength="{{ block.settings.max_length | default: 50 }}">
             {% endif %}
           </div>
 
         {% endfor %}
-      </div>
+        </div>
 
-      {% if section.settings.show_build_code %}
-      <div class="build-code-section">
-        <label>{{ section.settings.build_code_title | default: 'Jouw unieke Build Code:' }}</label>
-        <div class="build-code-display" id="build-code-display-{{ section.id }}">...</div>
-        <small>{{ section.settings.build_code_subtitle | default: 'Gebruik deze code bij je bestelling of voor referentie.' }}</small>
-      </div>
-      {% endif %}
+        {% if section.settings.show_build_code %}
+        <div class="build-code-section">
+          <label>{{ section.settings.build_code_title | default: 'Jouw unieke Build Code:' }}</label>
+          <div class="build-code-display" id="build-code-display-{{ section.id }}">...</div>
+          <small>{{ section.settings.build_code_subtitle | default: 'Gebruik deze code bij je bestelling of voor referentie.' }}</small>
+        </div>
+        {% endif %}
 
+        <div class="add-to-cart-container" style="margin-top: 2rem; display: flex; gap: 1rem;">
+          <div class="quantity-selector">
+            <label for="quantity-{{ section.id }}" style="display: none;">Aantal</label>
+            <input type="number" id="quantity-{{ section.id }}" name="quantity" value="1" min="1" class="config-input" style="width: 80px; text-align: center;">
+          </div>
+          <button type="submit" class="configurator-submit-btn" style="flex: 1;">In Winkelwagen</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -163,6 +180,22 @@
     font-size: 1.2rem;
     color: #555;
   }
+  .configurator-submit-btn {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #fff;
+    background-color: #000;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background-color 0.3s ease;
+  }
+  .configurator-submit-btn:hover {
+    background-color: #333;
+  }
 </style>
 
 <script>
@@ -179,6 +212,8 @@
         const triggerLabel = group.getAttribute('data-condition-trigger');
         const triggerValue = group.getAttribute('data-condition-value');
 
+        const inputInGroup = group.querySelector('.dynamic-input');
+
         if (triggerLabel && triggerLabel.trim() !== '') {
           // Find the input that matches the trigger label
           const formattedTriggerLabel = triggerLabel.toLowerCase().replace(/ /g, '_');
@@ -188,8 +223,10 @@
             // Check if current value matches the required value (or if any value is fine)
             if (triggerInput.value === triggerValue || triggerValue === '') {
               group.style.display = 'block';
+              if (inputInGroup) inputInGroup.disabled = false;
             } else {
               group.style.display = 'none';
+              if (inputInGroup) inputInGroup.disabled = true; // Prevents submitting to cart if hidden
             }
           }
         }
@@ -216,6 +253,7 @@
     const container = document.getElementById(`dynamic-options-container-${sectionId}`);
     const modelViewer = document.getElementById(`stick-model-viewer-${sectionId}`);
     const buildCodeDisplay = document.getElementById(`build-code-display-${sectionId}`);
+    const hiddenBuildCodeInput = document.getElementById(`hidden-build-code-${sectionId}`);
 
     if (!container || !modelViewer) return;
 
@@ -305,8 +343,12 @@
       });
 
       // 2. Output Build Code
+      const finalBuildCode = buildCodeParts.join('-');
       if (buildCodeDisplay) {
-        buildCodeDisplay.textContent = buildCodeParts.join('-') || '...';
+        buildCodeDisplay.textContent = finalBuildCode || '...';
+      }
+      if (hiddenBuildCodeInput) {
+        hiddenBuildCodeInput.value = finalBuildCode;
       }
 
       // 3. Update Model Viewer Src
