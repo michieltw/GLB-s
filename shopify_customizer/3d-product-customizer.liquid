@@ -6,254 +6,379 @@
 
     <!-- 3D Viewer Section -->
     <div class="viewer-section">
+      <!-- model-viewer met AR, Hotspots en soepele camera transities -->
       <model-viewer
         id="stick-model-viewer-{{ section.id }}"
         src="{{ 'DUMMY_FILE.glb' | file_url }}"
         alt="3D model configurator"
         auto-rotate
         camera-controls
+        ar
+        ar-modes="webxr scene-viewer quick-look"
         shadow-intensity="1"
         exposure="1"
         environment-image="legacy"
-        style="width: 100%; height: 600px; background-color: {{ section.settings.viewer_bg_color | default: '#f4f4f4' }}; border-radius: 8px;"
+        camera-target="auto auto auto"
+        camera-orbit="0deg 75deg 105%"
+        interpolation-decay="200"
+        style="width: 100%; height: 600px; background-color: {{ section.settings.viewer_bg_color | default: '#f4f4f4' }}; border-radius: 8px; position: relative;"
       >
         <div class="loading-poster" slot="poster">Laden...</div>
+
+        <!-- AR Button -->
+        <button slot="ar-button" class="ar-button">
+          👋 Bekijk in je kamer (AR)
+        </button>
+
+        <!-- Voorbeeld Hotspot (Optioneel, gericht op het blad) -->
+        <button class="Hotspot" slot="hotspot-blade" data-position="0 -0.5 0" data-normal="0 0 1" data-visibility-attribute="visible">
+            <div class="HotspotAnnotation">Focus op Blad</div>
+        </button>
+
       </model-viewer>
+
+      <!-- Camera Reset Button -->
+      <button id="reset-camera-btn-{{ section.id }}" class="secondary-btn" style="position: absolute; bottom: 10px; right: 10px; z-index: 10;">Reset Camera</button>
     </div>
 
     <!-- Options Section -->
     <div class="options-section">
-      <h2>{{ section.settings.title | default: 'Configureer je stick' }}</h2>
-
-      <!-- Stick Modellen Selectie -->
-      <div class="option-group">
-        <label for="stick-model-select-{{ section.id }}">Kies je model:</label>
-        <select id="stick-model-select-{{ section.id }}" class="config-select">
-          {% assign has_models = false %}
-          {% for block in section.blocks %}
-            {% if block.type == 'stick_model' %}
-              {% assign has_models = true %}
-              <!-- Optie op basis van de ingevulde filename in de block settings -->
-              <option value="{{ block.settings.filename }}">{{ block.settings.title }}</option>
-            {% endif %}
-          {% endfor %}
-          {% if has_models == false %}
-            <option value="">Geen modellen beschikbaar</option>
-          {% endif %}
-        </select>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+         <h2>{{ section.settings.title | default: 'Configureer je stick' }}</h2>
+         <h3 id="live-price-{{ section.id }}" class="price-display">{{ section.settings.base_price | money | default: '€ 0,00' }}</h3>
       </div>
 
-      <!-- Kleur Selectie -->
-      <div class="option-group">
-        <label>Kies een kleur:</label>
-        <div class="color-options-container" id="color-options-{{ section.id }}">
-          {% assign has_colors = false %}
-          {% for block in section.blocks %}
-            {% if block.type == 'color_option' %}
-              {% assign has_colors = true %}
-              <button
-                type="button"
-                class="color-btn"
-                data-color="{{ block.settings.color_hex }}"
-                style="background-color: {{ block.settings.color_hex }};"
-                title="{{ block.settings.title }}"
-                aria-label="Kleur: {{ block.settings.title }}"
-              ></button>
+      <form action="/cart/add" method="post" enctype="multipart/form-data" id="configurator-cart-form-{{ section.id }}">
+        <!-- Gebruik de gekoppelde productvariant als we niet op een productpagina zitten -->
+        {% assign variant_id = product.selected_or_first_available_variant.id | default: section.settings.base_product.selected_or_first_available_variant.id %}
+        <input type="hidden" name="id" value="{{ variant_id }}">
+        <!-- Lijnitem eigenschappen (voor winkelwagen) -->
+        <input type="hidden" name="properties[Build Code]" id="hidden-build-code-{{ section.id }}" value="">
+        <input type="hidden" name="properties[Model]" id="hidden-model-{{ section.id }}" value="">
+        <input type="hidden" name="properties[Kleur]" id="hidden-color-{{ section.id }}" value="">
+        <input type="hidden" name="properties[Zijde]" id="hidden-side-{{ section.id }}" value="">
+        <input type="hidden" name="properties[Lengte]" id="hidden-length-{{ section.id }}" value="">
+
+        <!-- Stick Modellen Selectie -->
+        <div class="option-group">
+          <label for="stick-model-select-{{ section.id }}">Kies je model:</label>
+          <select id="stick-model-select-{{ section.id }}" class="config-select dynamic-option" data-code-prefix="MOD">
+            {% assign has_models = false %}
+            {% for block in section.blocks %}
+              {% if block.type == 'stick_model' %}
+                {% assign has_models = true %}
+                <option value="{{ block.settings.filename }}" data-label="{{ block.settings.title }}" data-price="{{ block.settings.extra_price }}">{{ block.settings.title }} {% if block.settings.extra_price > 0 %}(+{{ block.settings.extra_price | money }}){% endif %}</option>
+              {% endif %}
+            {% endfor %}
+            {% if has_models == false %}
+              <option value="">Geen modellen beschikbaar</option>
             {% endif %}
-          {% endfor %}
-          {% if has_colors == false %}
-            <p>Geen kleuren beschikbaar</p>
-          {% endif %}
+          </select>
         </div>
-      </div>
 
+        <!-- Links / Rechts Selectie (Spiegeling) -->
+        <div class="option-group">
+          <label>Zijde (Links/Rechts):</label>
+          <div class="radio-group" id="side-options-{{ section.id }}">
+             <label class="radio-box active">
+                <input type="radio" name="side_selection" value="1" data-label="Links" data-code="L" class="dynamic-option" checked style="display:none;">
+                Links
+             </label>
+             <label class="radio-box">
+                <input type="radio" name="side_selection" value="-1" data-label="Rechts" data-code="R" class="dynamic-option" style="display:none;">
+                Rechts
+             </label>
+          </div>
+        </div>
+
+        <!-- Lengte Selectie (Schaling) -->
+        <div class="option-group">
+          <label>Lengte:</label>
+          <div class="radio-group" id="length-options-{{ section.id }}">
+             <label class="radio-box">
+                <input type="radio" name="length_selection" value="0.9" data-label="Kort (-10%)" data-code="SH" class="dynamic-option" style="display:none;">
+                Kort
+             </label>
+             <label class="radio-box active">
+                <input type="radio" name="length_selection" value="1.0" data-label="Standaard" data-code="ST" class="dynamic-option" checked style="display:none;">
+                Standaard
+             </label>
+             <label class="radio-box">
+                <input type="radio" name="length_selection" value="1.1" data-label="Lang (+10%)" data-code="LG" class="dynamic-option" style="display:none;">
+                Lang
+             </label>
+          </div>
+        </div>
+
+        <!-- Kleur Selectie -->
+        <div class="option-group">
+          <label>Kies een kleur:</label>
+          <div class="color-options-container" id="color-options-{{ section.id }}">
+            {% assign has_colors = false %}
+            {% for block in section.blocks %}
+              {% if block.type == 'color_option' %}
+                {% assign has_colors = true %}
+                <button
+                  type="button"
+                  class="color-btn dynamic-option"
+                  data-color="{{ block.settings.color_hex }}"
+                  data-label="{{ block.settings.title }}"
+                  data-code="{{ block.settings.title | slice: 0, 3 | upcase }}"
+                  style="background-color: {{ block.settings.color_hex }};"
+                  title="{{ block.settings.title }}"
+                  aria-label="Kleur: {{ block.settings.title }}"
+                ></button>
+              {% endif %}
+            {% endfor %}
+            {% if has_colors == false %}
+              <p>Geen kleuren beschikbaar</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Build Code Display -->
+        <div class="build-code-section">
+          <label>Jouw Unieke Build Code:</label>
+          <div class="build-code-display" id="build-code-display-{{ section.id }}">...</div>
+        </div>
+
+        <div class="add-to-cart-container" style="margin-top: 1rem;">
+          <button type="submit" class="configurator-submit-btn">Aan Winkelwagen Toevoegen</button>
+        </div>
+
+      </form>
     </div>
   </div>
 </div>
 
 <style>
-  .hockey-stick-configurator {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-    font-family: inherit;
-  }
-  .configurator-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-  }
-  @media (min-width: 768px) {
-    .configurator-layout {
-      flex-direction: row;
-      align-items: flex-start;
-    }
-  }
-  .viewer-section {
-    flex: 1 1 60%;
-    position: sticky;
-    top: 2rem;
-  }
-  .options-section {
-    flex: 1 1 40%;
-    background: #fff;
-    padding: 2rem;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  }
-  .options-section h2 {
-    margin-top: 0;
-    margin-bottom: 1.5rem;
-    font-size: 1.5rem;
-  }
-  .option-group {
-    margin-bottom: 1.5rem;
-  }
-  .option-group label {
-    display: block;
-    font-weight: bold;
-    margin-bottom: 0.5rem;
-  }
-  .config-select {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 1rem;
-    background-color: #fafafa;
-    box-sizing: border-box;
-  }
-  .color-options-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  .color-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 2px solid #ccc;
-    cursor: pointer;
-    transition: transform 0.2s, border-color 0.2s;
-  }
-  .color-btn:hover {
-    transform: scale(1.1);
-  }
-  .color-btn.active {
-    border-color: #000;
-    box-shadow: 0 0 0 2px #000;
-  }
-  .loading-poster {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 1.2rem;
-    color: #555;
-  }
+  .hockey-stick-configurator { max-width: 1200px; margin: 0 auto; padding: 2rem; font-family: inherit; }
+  .configurator-layout { display: flex; flex-direction: column; gap: 2rem; }
+  @media (min-width: 768px) { .configurator-layout { flex-direction: row; align-items: flex-start; } }
+  .viewer-section { flex: 1 1 60%; position: sticky; top: 2rem; }
+  .options-section { flex: 1 1 40%; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
+  .options-section h2 { margin-top: 0; margin-bottom: 1.5rem; font-size: 1.5rem; }
+  .price-display { color: #d32f2f; font-weight: bold; }
+  .option-group { margin-bottom: 1.5rem; }
+  .option-group label { display: block; font-weight: bold; margin-bottom: 0.5rem; }
+  .config-select { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; background-color: #fafafa; }
+
+  .color-options-container { display: flex; flex-wrap: wrap; gap: 10px; }
+  .color-btn { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #ccc; cursor: pointer; transition: transform 0.2s, border-color 0.2s; }
+  .color-btn:hover { transform: scale(1.1); }
+  .color-btn.active { border-color: #000; box-shadow: 0 0 0 2px #000; }
+
+  .radio-group { display: flex; gap: 10px; }
+  .radio-box { flex: 1; text-align: center; padding: 10px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #fafafa; transition: all 0.2s; }
+  .radio-box.active { background: #000; color: #fff; border-color: #000; }
+
+  .build-code-section { margin-top: 1.5rem; padding: 1rem; background-color: #f8f9fa; border: 1px dashed #ccc; border-radius: 6px; text-align: center; }
+  .build-code-display { font-family: monospace; font-size: 1.25rem; font-weight: bold; color: #000; letter-spacing: 1px; }
+
+  .configurator-submit-btn { width: 100%; padding: 1rem; font-size: 1.2rem; font-weight: bold; color: #fff; background-color: #000; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
+  .configurator-submit-btn:hover { background-color: #333; }
+  .secondary-btn { padding: 8px 16px; background: rgba(255,255,255,0.8); border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+
+  /* Hotspot Styling */
+  .Hotspot { background: #fff; border-radius: 32px; border: 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); box-sizing: border-box; cursor: pointer; height: 24px; padding: 8px; position: relative; transition: opacity 0.3s; width: 24px; }
+  .Hotspot:not([data-visible]) { background: transparent; border: 4px solid #fff; box-shadow: none; height: 32px; pointer-events: none; width: 32px; }
+  .Hotspot:focus { border: 4px solid rgb(0, 128, 200); height: 32px; outline: none; width: 32px; }
+  .Hotspot > * { opacity: 1; transform: translateY(-50%); }
+  .HotspotAnnotation{ background: #fff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); color: rgba(0, 0, 0, 0.8); display: block; font-family: Futura, Helvetica Neue, sans-serif; font-size: 18px; font-weight: 700; left: calc(100% + 1em); max-width: 128px; overflow-wrap: break-word; padding: 0.5em 1em; position: absolute; top: 50%; width: max-content; }
+  .Hotspot:not([data-visible]) > * { opacity: 0; pointer-events: none; transform: translateY(calc(-50% + 4px)); transition: transform 0.3s, opacity 0.3s; }
+
+  /* AR Button Styling */
+  .ar-button { background-color: white; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.25); color: rgba(0,0,0,0.8); display: block; font-size: 14px; font-weight: 500; left: 50%; bottom: 20px; padding: 10px 20px; position: absolute; transform: translateX(-50%); }
 </style>
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const sectionId = "{{ section.id }}";
     const modelViewer = document.getElementById(`stick-model-viewer-${sectionId}`);
+
+    // UI Elements
     const stickSelect = document.getElementById(`stick-model-select-${sectionId}`);
     const colorContainer = document.getElementById(`color-options-${sectionId}`);
+    const sideInputs = document.querySelectorAll(`input[name="side_selection"]`);
+    const lengthInputs = document.querySelectorAll(`input[name="length_selection"]`);
+    const buildCodeDisplay = document.getElementById(`build-code-display-${sectionId}`);
+    const priceDisplay = document.getElementById(`live-price-${sectionId}`);
 
-    if (!modelViewer) return;
+    // Form Inputs (Hidden)
+    const hiddenModel = document.getElementById(`hidden-model-${sectionId}`);
+    const hiddenColor = document.getElementById(`hidden-color-${sectionId}`);
+    const hiddenSide = document.getElementById(`hidden-side-${sectionId}`);
+    const hiddenLength = document.getElementById(`hidden-length-${sectionId}`);
+    const hiddenBuildCode = document.getElementById(`hidden-build-code-${sectionId}`);
 
-    // We store the dummy url template and replace DUMMY_FILE.glb dynamically
+    const basePriceCents = {{ section.settings.base_price | default: 0 }}; // In format Shopify outputs natively or assuming minor units depending on setup. Let's use simple numbers.
     const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
 
-    // Convert hex string (#RRGGBB) to RGBA array for model-viewer material API
+    // State
+    let activeColorHex = null;
+    let activeColorCode = "";
+    let activeColorLabel = "";
+
     function hexToRgbA(hex) {
       if (!hex || !hex.startsWith('#')) return null;
       let c;
       if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
           c= hex.substring(1).split('');
-          if(c.length== 3){
-              c= [c[0], c[0], c[1], c[1], c[2], c[2]];
-          }
+          if(c.length== 3){ c= [c[0], c[0], c[1], c[1], c[2], c[2]]; }
           c= '0x'+c.join('');
           return [((c>>16)&255)/255, ((c>>8)&255)/255, (c&255)/255, 1];
       }
       return null;
     }
 
-    let activeColor = null;
+    // Money formatter (Basic fallback)
+    function formatMoney(cents) {
+        return "€ " + (cents / 100).toFixed(2).replace('.', ',');
+    }
 
-    // Load stick
-    function loadSelectedStick() {
-      if (!stickSelect) return;
-      const filename = stickSelect.value;
+    // Hoofdfunctie voor updates
+    function updateConfigurator() {
+      if (!modelViewer) return;
+
+      // 1. Model ophalen
+      const selectedOption = stickSelect.options[stickSelect.selectedIndex];
+      const filename = selectedOption.value;
+      const modelLabel = selectedOption.getAttribute('data-label') || '';
+      // Voor de buildcode: probeer de eerste 3 letters, anders gewoon de value
+      const modelCode = (modelLabel.length > 0) ? modelLabel.replace(/[^a-zA-Z0-9]/g, '').substring(0,3).toUpperCase() : "MOD";
+
+      const extraPrice = parseInt(selectedOption.getAttribute('data-price') || "0");
+
       if (filename) {
-        // Zorg ervoor dat het eindigt op .glb als dat er niet al staat
         const fullFilename = filename.toLowerCase().endsWith('.glb') ? filename : filename + '.glb';
         const newUrl = baseUrlTemplate.replace('DUMMY_FILE.glb', fullFilename);
-        modelViewer.src = newUrl;
-      }
-    }
-
-    // Apply color to the base material
-    function applyColor(hexColor) {
-      activeColor = hexToRgbA(hexColor);
-
-      // Try to apply immediately if model is already loaded
-      if (activeColor && modelViewer.model && modelViewer.model.materials) {
-        const material = modelViewer.model.materials[0];
-        if (material) {
-          material.pbrMetallicRoughness.setBaseColorFactor(activeColor);
+        if (!modelViewer.src || !modelViewer.src.includes(fullFilename)) {
+          modelViewer.src = newUrl;
         }
       }
+      hiddenModel.value = modelLabel;
 
-      // Opslaan op het element zodat we na herladen (bijv stick wissel) de kleur kunnen herstellen
-      modelViewer.dataset.currentColor = activeColor ? JSON.stringify(activeColor) : "";
+      // 2. Transformaties (Schaal & Spiegeling)
+      let scaleX = 1;
+      let scaleY = 1;
+      let sideLabel = "Links";
+      let sideCode = "L";
+      let lengthLabel = "Standaard";
+      let lengthCode = "ST";
+
+      sideInputs.forEach(input => {
+         if (input.checked) {
+             scaleX = parseFloat(input.value);
+             sideLabel = input.getAttribute('data-label');
+             sideCode = input.getAttribute('data-code');
+             // Update UI parent
+             input.closest('.radio-box').classList.add('active');
+         } else {
+             input.closest('.radio-box').classList.remove('active');
+         }
+      });
+      hiddenSide.value = sideLabel;
+
+      lengthInputs.forEach(input => {
+         if (input.checked) {
+             scaleY = parseFloat(input.value);
+             lengthLabel = input.getAttribute('data-label');
+             lengthCode = input.getAttribute('data-code');
+             input.closest('.radio-box').classList.add('active');
+         } else {
+             input.closest('.radio-box').classList.remove('active');
+         }
+      });
+      hiddenLength.value = lengthLabel;
+
+      modelViewer.scale = `${scaleX} ${scaleY} 1`;
+
+      // 3. Kleur Toepassen
+      if (activeColorHex) {
+         const rgba = hexToRgbA(activeColorHex);
+         if (rgba && modelViewer.model && modelViewer.model.materials) {
+            const material = modelViewer.model.materials[0];
+            if (material) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+         }
+         modelViewer.dataset.currentColor = JSON.stringify(rgba);
+      }
+      hiddenColor.value = activeColorLabel;
+
+      // 4. Build Code Genereren
+      const parts = [modelCode, lengthCode, sideCode, activeColorCode];
+      const finalCode = parts.filter(p => p).join('-');
+      buildCodeDisplay.textContent = finalCode || "...";
+      hiddenBuildCode.value = finalCode;
+
+      // 5. Prijs updaten (gesimuleerd)
+      // OPMERKING: base_price van de section, we rekenen hier gewoon met ruwe data als voorbeeld.
+      // Shopify vereist dat dit in de winkelwagen correct gemapt is naar varianten voor afrekening.
+      const totalPrice = basePriceCents + extraPrice;
+      if (priceDisplay && totalPrice > 0) {
+          priceDisplay.textContent = formatMoney(totalPrice);
+      }
     }
 
-    // Event listener voor de Stick Dropdown
-    if (stickSelect) {
-      stickSelect.addEventListener('change', loadSelectedStick);
-      // Initiele laad
-      loadSelectedStick();
-    }
+    // Event Listeners binden
+    if (stickSelect) stickSelect.addEventListener('change', updateConfigurator);
 
-    // Event listeners voor de Kleur Knoppen
+    sideInputs.forEach(input => input.addEventListener('change', updateConfigurator));
+    lengthInputs.forEach(input => input.addEventListener('change', updateConfigurator));
+
     if (colorContainer) {
       const colorBtns = colorContainer.querySelectorAll('.color-btn');
       colorBtns.forEach(btn => {
-        btn.addEventListener('click', function(e) {
-          // Update active state op knoppen
+        btn.addEventListener('click', function() {
           colorBtns.forEach(b => b.classList.remove('active'));
           this.classList.add('active');
-
-          const hex = this.getAttribute('data-color');
-          applyColor(hex);
+          activeColorHex = this.getAttribute('data-color');
+          activeColorCode = this.getAttribute('data-code');
+          activeColorLabel = this.getAttribute('data-label');
+          updateConfigurator();
         });
       });
-
-      // Simuleer een klik op de eerste kleur om een default te zetten als er knoppen zijn
-      if (colorBtns.length > 0) {
-        colorBtns[0].click();
-      }
+      // Initialiseer met de eerste kleur
+      if (colorBtns.length > 0) { colorBtns[0].click(); }
     }
 
-    // Wanneer de source van de modelviewer inlaadt (bijv. na stick wissel), her-apply de opgeslagen kleur
-    modelViewer.addEventListener('load', function() {
-      if (modelViewer.dataset.currentColor && modelViewer.model && modelViewer.model.materials) {
-        const material = modelViewer.model.materials[0];
-        if (material) {
-           const colorArr = JSON.parse(modelViewer.dataset.currentColor);
-           material.pbrMetallicRoughness.setBaseColorFactor(colorArr);
-        }
-      }
-    });
+    // Her-apply color after loading new model
+    if (modelViewer) {
+        modelViewer.addEventListener('load', function() {
+          if (modelViewer.dataset.currentColor && modelViewer.model && modelViewer.model.materials) {
+            const rgba = JSON.parse(modelViewer.dataset.currentColor);
+            const material = modelViewer.model.materials[0];
+            if (material) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+          }
+        });
 
+        // Hotspot klik-gedrag: focus camera
+        const hotspot = modelViewer.querySelector('.Hotspot');
+        if (hotspot) {
+            hotspot.addEventListener('click', () => {
+                modelViewer.cameraTarget = hotspot.dataset.position;
+                // Optioneel: zoom wat in
+                modelViewer.cameraOrbit = "45deg 75deg 50%";
+            });
+        }
+
+        // Reset camera knop
+        const resetBtn = document.getElementById(`reset-camera-btn-${sectionId}`);
+        if(resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                modelViewer.cameraTarget = "auto auto auto";
+                modelViewer.cameraOrbit = "0deg 75deg 105%";
+            });
+        }
+    }
+
+    // First run
+    updateConfigurator();
   });
 </script>
 
 {% schema %}
 {
-  "name": "3D Product Customizer",
+  "name": "3D Product Customizer V2",
   "settings": [
     {
       "type": "text",
@@ -266,6 +391,19 @@
       "id": "viewer_bg_color",
       "label": "Achtergrondkleur 3D Viewer",
       "default": "#f4f4f4"
+    },
+    {
+      "type": "product",
+      "id": "base_product",
+      "label": "Basis Product",
+      "info": "Kies hier het basisproduct als deze sectie niet op een specifieke productpagina staat, zodat we een product aan de winkelwagen kunnen toevoegen."
+    },
+    {
+      "type": "number",
+      "id": "base_price",
+      "label": "Basis Prijs (in centen)",
+      "info": "Bijv. 14995 voor €149,95",
+      "default": 14995
     }
   ],
   "blocks": [
@@ -283,7 +421,14 @@
           "type": "text",
           "id": "filename",
           "label": "GLB Bestandsnaam",
-          "info": "Vul hier de bestandsnaam in zoals die in Bestanden staat, bijv. 'P28.glb'. De .glb extensie mag je weglaten, die wordt automatisch toegevoegd als dat nodig is."
+          "info": "Bijv. 'P28.glb'"
+        },
+        {
+          "type": "number",
+          "id": "extra_price",
+          "label": "Meerprijs (in centen)",
+          "info": "Bijv. 2000 voor €20,00 extra",
+          "default": 0
         }
       ]
     },
@@ -308,7 +453,7 @@
   ],
   "presets": [
     {
-      "name": "3D Product Customizer",
+      "name": "3D Product Customizer V2",
       "category": "Product"
     }
   ]
