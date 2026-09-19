@@ -1,0 +1,316 @@
+<!-- Laad de model-viewer bibliotheek in (indien nog niet elders in het thema geladen) -->
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
+<div class="hockey-stick-configurator horizon-section" data-section-id="{{ section.id }}">
+  <div class="configurator-layout">
+
+    <!-- 3D Viewer Section -->
+    <div class="viewer-section">
+      <model-viewer
+        id="stick-model-viewer-{{ section.id }}"
+        src="{{ 'DUMMY_FILE.glb' | file_url }}"
+        alt="3D model configurator"
+        auto-rotate
+        camera-controls
+        shadow-intensity="1"
+        exposure="1"
+        environment-image="legacy"
+        style="width: 100%; height: 600px; background-color: {{ section.settings.viewer_bg_color | default: '#f4f4f4' }}; border-radius: 8px;"
+      >
+        <div class="loading-poster" slot="poster">Laden...</div>
+      </model-viewer>
+    </div>
+
+    <!-- Options Section -->
+    <div class="options-section">
+      <h2>{{ section.settings.title | default: 'Configureer je stick' }}</h2>
+
+      <!-- Stick Modellen Selectie -->
+      <div class="option-group">
+        <label for="stick-model-select-{{ section.id }}">Kies je model:</label>
+        <select id="stick-model-select-{{ section.id }}" class="config-select">
+          {% assign has_models = false %}
+          {% for block in section.blocks %}
+            {% if block.type == 'stick_model' %}
+              {% assign has_models = true %}
+              <!-- Optie op basis van de ingevulde filename in de block settings -->
+              <option value="{{ block.settings.filename }}">{{ block.settings.title }}</option>
+            {% endif %}
+          {% endfor %}
+          {% if has_models == false %}
+            <option value="">Geen modellen beschikbaar</option>
+          {% endif %}
+        </select>
+      </div>
+
+      <!-- Kleur Selectie -->
+      <div class="option-group">
+        <label>Kies een kleur:</label>
+        <div class="color-options-container" id="color-options-{{ section.id }}">
+          {% assign has_colors = false %}
+          {% for block in section.blocks %}
+            {% if block.type == 'color_option' %}
+              {% assign has_colors = true %}
+              <button
+                type="button"
+                class="color-btn"
+                data-color="{{ block.settings.color_hex }}"
+                style="background-color: {{ block.settings.color_hex }};"
+                title="{{ block.settings.title }}"
+                aria-label="Kleur: {{ block.settings.title }}"
+              ></button>
+            {% endif %}
+          {% endfor %}
+          {% if has_colors == false %}
+            <p>Geen kleuren beschikbaar</p>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+  .hockey-stick-configurator {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    font-family: inherit;
+  }
+  .configurator-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+  @media (min-width: 768px) {
+    .configurator-layout {
+      flex-direction: row;
+      align-items: flex-start;
+    }
+  }
+  .viewer-section {
+    flex: 1 1 60%;
+    position: sticky;
+    top: 2rem;
+  }
+  .options-section {
+    flex: 1 1 40%;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  }
+  .options-section h2 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+  }
+  .option-group {
+    margin-bottom: 1.5rem;
+  }
+  .option-group label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+  }
+  .config-select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    background-color: #fafafa;
+    box-sizing: border-box;
+  }
+  .color-options-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .color-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #ccc;
+    cursor: pointer;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .color-btn:hover {
+    transform: scale(1.1);
+  }
+  .color-btn.active {
+    border-color: #000;
+    box-shadow: 0 0 0 2px #000;
+  }
+  .loading-poster {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.2rem;
+    color: #555;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const sectionId = "{{ section.id }}";
+    const modelViewer = document.getElementById(`stick-model-viewer-${sectionId}`);
+    const stickSelect = document.getElementById(`stick-model-select-${sectionId}`);
+    const colorContainer = document.getElementById(`color-options-${sectionId}`);
+
+    if (!modelViewer) return;
+
+    // We store the dummy url template and replace DUMMY_FILE.glb dynamically
+    const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
+
+    // Convert hex string (#RRGGBB) to RGBA array for model-viewer material API
+    function hexToRgbA(hex) {
+      if (!hex || !hex.startsWith('#')) return null;
+      let c;
+      if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
+          c= hex.substring(1).split('');
+          if(c.length== 3){
+              c= [c[0], c[0], c[1], c[1], c[2], c[2]];
+          }
+          c= '0x'+c.join('');
+          return [((c>>16)&255)/255, ((c>>8)&255)/255, (c&255)/255, 1];
+      }
+      return null;
+    }
+
+    let activeColor = null;
+
+    // Load stick
+    function loadSelectedStick() {
+      if (!stickSelect) return;
+      const filename = stickSelect.value;
+      if (filename) {
+        // Zorg ervoor dat het eindigt op .glb als dat er niet al staat
+        const fullFilename = filename.toLowerCase().endsWith('.glb') ? filename : filename + '.glb';
+        const newUrl = baseUrlTemplate.replace('DUMMY_FILE.glb', fullFilename);
+        modelViewer.src = newUrl;
+      }
+    }
+
+    // Apply color to the base material
+    function applyColor(hexColor) {
+      activeColor = hexToRgbA(hexColor);
+
+      // Try to apply immediately if model is already loaded
+      if (activeColor && modelViewer.model && modelViewer.model.materials) {
+        const material = modelViewer.model.materials[0];
+        if (material) {
+          material.pbrMetallicRoughness.setBaseColorFactor(activeColor);
+        }
+      }
+
+      // Opslaan op het element zodat we na herladen (bijv stick wissel) de kleur kunnen herstellen
+      modelViewer.dataset.currentColor = activeColor ? JSON.stringify(activeColor) : "";
+    }
+
+    // Event listener voor de Stick Dropdown
+    if (stickSelect) {
+      stickSelect.addEventListener('change', loadSelectedStick);
+      // Initiele laad
+      loadSelectedStick();
+    }
+
+    // Event listeners voor de Kleur Knoppen
+    if (colorContainer) {
+      const colorBtns = colorContainer.querySelectorAll('.color-btn');
+      colorBtns.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          // Update active state op knoppen
+          colorBtns.forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+
+          const hex = this.getAttribute('data-color');
+          applyColor(hex);
+        });
+      });
+
+      // Simuleer een klik op de eerste kleur om een default te zetten als er knoppen zijn
+      if (colorBtns.length > 0) {
+        colorBtns[0].click();
+      }
+    }
+
+    // Wanneer de source van de modelviewer inlaadt (bijv. na stick wissel), her-apply de opgeslagen kleur
+    modelViewer.addEventListener('load', function() {
+      if (modelViewer.dataset.currentColor && modelViewer.model && modelViewer.model.materials) {
+        const material = modelViewer.model.materials[0];
+        if (material) {
+           const colorArr = JSON.parse(modelViewer.dataset.currentColor);
+           material.pbrMetallicRoughness.setBaseColorFactor(colorArr);
+        }
+      }
+    });
+
+  });
+</script>
+
+{% schema %}
+{
+  "name": "3D Product Customizer",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Titel",
+      "default": "Configureer je stick"
+    },
+    {
+      "type": "color",
+      "id": "viewer_bg_color",
+      "label": "Achtergrondkleur 3D Viewer",
+      "default": "#f4f4f4"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "stick_model",
+      "name": "Stick Model (.glb)",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Naam van de Stick",
+          "info": "Bijv. 'P28 Senior Stick'"
+        },
+        {
+          "type": "text",
+          "id": "filename",
+          "label": "GLB Bestandsnaam",
+          "info": "Vul hier de bestandsnaam in zoals die in Bestanden staat, bijv. 'P28.glb'. De .glb extensie mag je weglaten, die wordt automatisch toegevoegd als dat nodig is."
+        }
+      ]
+    },
+    {
+      "type": "color_option",
+      "name": "Kleur Optie",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Kleur Naam",
+          "info": "Bijv. 'Zwart' of 'Neon Groen'"
+        },
+        {
+          "type": "color",
+          "id": "color_hex",
+          "label": "Kies de Kleur",
+          "default": "#000000"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "3D Product Customizer",
+      "category": "Product"
+    }
+  ]
+}
+{% endschema %}
