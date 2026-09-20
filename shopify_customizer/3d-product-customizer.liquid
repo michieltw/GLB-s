@@ -111,6 +111,26 @@
           </div>
         </div>
 
+        <!-- Niet-visuele specificaties (Flex, Kick-point, etc.) -->
+        {% for block in section.blocks %}
+          {% if block.type == 'text_option' %}
+            <div class="option-group">
+              <label for="text-option-{{ block.id }}">{{ block.settings.title }}:</label>
+              <select id="text-option-{{ block.id }}"
+                      class="config-select dynamic-option non-visual-option"
+                      data-category="{{ block.settings.title }}">
+                {% assign options = block.settings.options | split: ',' %}
+                {% for option in options %}
+                  {% assign opt_parts = option | split: ':' %}
+                  {% assign opt_label = opt_parts[0] | strip %}
+                  {% assign opt_code = opt_parts[1] | default: opt_label | strip %}
+                  <option value="{{ opt_label }}" data-code="{{ opt_code }}">{{ opt_label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endif %}
+        {% endfor %}
+
         <!-- Multi-Materiaal Kleur Selectie -->
         <!-- We bouwen dynamisch kleur groepen op basis van de materiaal_index in het schema -->
         <div id="multi-color-container-{{ section.id }}">
@@ -197,6 +217,7 @@
     const hiddenSide = document.getElementById(`hidden-side-${sectionId}`);
     const hiddenLength = document.getElementById(`hidden-length-${sectionId}`);
     const hiddenBuildCode = document.getElementById(`hidden-build-code-${sectionId}`);
+    const nonVisualSelects = document.querySelectorAll(`.non-visual-option`);
 
     const basePriceCents = {{ section.settings.base_price | default: 0 }};
     const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
@@ -204,6 +225,7 @@
     // State
     // activeColors bewaart per materiaal_index de gekozen hex, label en code.
     let activeColors = {};
+    let nonVisualData = {};
 
     // 1. Initialiseer Multi-Materiaal Kleurgroepen vanuit HTML Data
     function buildColorGroups() {
@@ -289,17 +311,28 @@
         return "€ " + (cents / 100).toFixed(2).replace('.', ',');
     }
 
-    // Update verborgen formulier velden voor kleuren zodat cart ze oppikt
-    function updateHiddenColorInputs() {
-        // Verwijder oude kleur inputs
-        document.querySelectorAll(`.dynamic-hidden-color-${sectionId}`).forEach(el => el.remove());
+    // Update verborgen formulier velden voor kleuren en niet-visuele opties zodat cart ze oppikt
+    function updateHiddenDynamicInputs() {
+        // Verwijder oude dynamische inputs
+        document.querySelectorAll(`.dynamic-hidden-property-${sectionId}`).forEach(el => el.remove());
 
+        // Kleuren
         for (const [idx, colorData] of Object.entries(activeColors)) {
             const input = document.createElement('input');
             input.type = 'hidden';
             input.name = `properties[${colorData.category}]`;
             input.value = colorData.label;
-            input.className = `dynamic-hidden-color-${sectionId}`;
+            input.className = `dynamic-hidden-property-${sectionId}`;
+            cartForm.appendChild(input);
+        }
+
+        // Niet-visuele opties (Flex, Gewicht, etc.)
+        for (const [category, data] of Object.entries(nonVisualData)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `properties[${category}]`;
+            input.value = data.label;
+            input.className = `dynamic-hidden-property-${sectionId}`;
             cartForm.appendChild(input);
         }
     }
@@ -380,11 +413,24 @@
          modelViewer.dataset.currentColors = JSON.stringify(activeColors);
       }
 
-      updateHiddenColorInputs();
+      // 4. Verwerk niet-visuele opties
+      let nonVisualCodes = [];
+      nonVisualSelects.forEach(select => {
+          const category = select.getAttribute('data-category');
+          const selectedOpt = select.options[select.selectedIndex];
+          if(selectedOpt) {
+              const label = selectedOpt.value;
+              const code = selectedOpt.getAttribute('data-code');
+              nonVisualData[category] = { label: label, code: code };
+              nonVisualCodes.push(code);
+          }
+      });
 
-      // 4. Build Code Genereren
+      updateHiddenDynamicInputs();
+
+      // 5. Build Code Genereren (Inclusief non-visuals)
       let colorCodes = Object.values(activeColors).map(c => c.code);
-      const parts = [modelCode, lengthCode, sideCode, ...colorCodes];
+      const parts = [modelCode, lengthCode, sideCode, ...nonVisualCodes, ...colorCodes];
       const finalCode = parts.filter(p => p).join('-');
       buildCodeDisplay.textContent = finalCode || "...";
       hiddenBuildCode.value = finalCode;
@@ -405,6 +451,7 @@
     if (stickSelect) stickSelect.addEventListener('change', updateConfigurator);
     sideInputs.forEach(input => input.addEventListener('change', updateConfigurator));
     lengthInputs.forEach(input => input.addEventListener('change', updateConfigurator));
+    nonVisualSelects.forEach(select => select.addEventListener('change', updateConfigurator));
 
     // Her-apply kleuren na laden nieuw model
     if (modelViewer) {
@@ -545,11 +592,29 @@
           "default": "#000000"
         }
       ]
+    },
+    {
+      "type": "text_option",
+      "name": "Specificatie (Niet-visueel)",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Titel Specificatie",
+          "info": "Bijv. 'Flex' of 'Kick-point'"
+        },
+        {
+          "type": "textarea",
+          "id": "options",
+          "label": "Keuzes (komma-gescheiden)",
+          "info": "Formaat: Label:Waarde, Label2:Waarde2. Bijv. 75 Flex:75, 85 Flex:85 of Low-kick:LK, Mid-kick:MK"
+        }
+      ]
     }
   ],
   "presets": [
     {
-      "name": "3D Product Customizer V3",
+      "name": "3D Product Customizer V4",
       "category": "Product"
     }
   ]
