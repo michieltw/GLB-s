@@ -116,13 +116,14 @@
               <label for="text-option-{{ block.id }}">{{ block.settings.title }}:</label>
               <select id="text-option-{{ block.id }}"
                       class="config-select dynamic-option non-visual-option"
-                      data-category="{{ block.settings.title }}">
+                      data-category="{{ block.settings.title }}"
+                      data-extra-price="{{ block.settings.extra_price | default: 0 }}">
                 {% assign options = block.settings.options | split: ',' %}
                 {% for option in options %}
                   {% assign opt_parts = option | split: ':' %}
                   {% assign opt_label = opt_parts[0] | strip %}
                   {% assign opt_code = opt_parts[1] | default: opt_label | strip %}
-                  <option value="{{ opt_label }}" data-code="{{ opt_code }}">{{ opt_label }}</option>
+                  <option value="{{ opt_label }}" data-code="{{ opt_code }}" data-extra-price="{{ block.settings.extra_price | default: 0 }}">{{ opt_label }}{% if block.settings.extra_price > 0 %} (+{{ block.settings.extra_price | money }}){% endif %}</option>
                 {% endfor %}
               </select>
             </div>
@@ -149,7 +150,8 @@
                    data-title="{{ block.settings.title }}"
                    data-hex="{{ block.settings.color_hex }}"
                    data-index="{{ block.settings.material_index }}"
-                   data-category="{{ block.settings.category_name }}">
+                   data-category="{{ block.settings.category_name }}"
+                   data-extra-price="{{ block.settings.extra_price | default: 0 }}">
               </div>
             {% elsif block.type == 'finish_option' %}
               <div class="block-data-item"
@@ -157,7 +159,8 @@
                    data-title="{{ block.settings.title }}"
                    data-roughness="{{ block.settings.roughness }}"
                    data-index="{{ block.settings.material_index }}"
-                   data-category="{{ block.settings.category_name }}">
+                   data-category="{{ block.settings.category_name }}"
+                   data-extra-price="{{ block.settings.extra_price | default: 0 }}">
               </div>
             {% elsif block.type == 'texture_option' %}
               <div class="block-data-item"
@@ -166,7 +169,8 @@
                    data-image-url="{% if block.settings.texture_image != blank %}{{ block.settings.texture_image | img_url: 'master' }}{% endif %}"
                    data-texture-type="{{ block.settings.texture_type }}"
                    data-index="{{ block.settings.material_index }}"
-                   data-category="{{ block.settings.category_name }}">
+                   data-category="{{ block.settings.category_name }}"
+                   data-extra-price="{{ block.settings.extra_price | default: 0 }}">
               </div>
             {% endif %}
           {% endfor %}
@@ -200,9 +204,9 @@
   .config-select { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; background-color: #fafafa; }
 
   .color-options-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
-  .color-btn { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #ccc; cursor: pointer; transition: transform 0.2s, border-color 0.2s; }
-  .color-btn:hover { transform: scale(1.1); }
-  .color-btn.active { border-color: #000; box-shadow: 0 0 0 2px #000; }
+  .color-btn, .texture-btn { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #ccc; cursor: pointer; transition: transform 0.2s, border-color 0.2s; background-size: cover; background-position: center; }
+  .color-btn:hover, .texture-btn:hover { transform: scale(1.1); }
+  .color-btn.active, .texture-btn.active { border-color: #000; box-shadow: 0 0 0 2px #000; }
 
   .radio-group { display: flex; gap: 10px; }
   .radio-box { flex: 1; text-align: center; padding: 10px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #fafafa; transition: all 0.2s; }
@@ -267,21 +271,23 @@
            const title = item.getAttribute('data-title');
            const code = title ? title.substring(0,3).toUpperCase() : "OPT";
 
+           const price = parseInt(item.getAttribute('data-extra-price') || "0");
+
            if(type === 'color') {
                const hex = item.getAttribute('data-hex');
                if(!groupedColors[cat]) groupedColors[cat] = { index: idx, options: [] };
-               groupedColors[cat].options.push({ hex, title, code });
+               groupedColors[cat].options.push({ hex, title, code, price });
            }
            else if (type === 'finish') {
                const roughness = item.getAttribute('data-roughness');
                if(!groupedSelects[cat]) groupedSelects[cat] = { type: 'finish', index: idx, options: [] };
-               groupedSelects[cat].options.push({ roughness, title, code });
+               groupedSelects[cat].options.push({ roughness, title, code, price });
            }
            else if (type === 'texture') {
                const url = item.getAttribute('data-image-url');
                const texType = item.getAttribute('data-texture-type');
                if(!groupedSelects[cat]) groupedSelects[cat] = { type: 'texture', index: idx, texType: texType, options: [] };
-               groupedSelects[cat].options.push({ url, title, code });
+               groupedSelects[cat].options.push({ url, title, code, price });
            }
        });
 
@@ -306,18 +312,18 @@
                btn.addEventListener('click', function() {
                   Array.from(btnContainer.children).forEach(c => c.classList.remove('active'));
                   this.classList.add('active');
-                  activeColors[data.index] = { hex: opt.hex, label: opt.title, code: opt.code, category: category };
+                  activeColors[data.index] = { hex: opt.hex, label: opt.title, code: opt.code, category: category, price: opt.price };
                   updateConfigurator();
                });
 
                btnContainer.appendChild(btn);
-               if(index === 0) activeColors[data.index] = { hex: opt.hex, label: opt.title, code: opt.code, category: category };
+               if(index === 0) activeColors[data.index] = { hex: opt.hex, label: opt.title, code: opt.code, category: category, price: opt.price };
            });
            groupDiv.appendChild(btnContainer);
            if(multiColorContainer) multiColorContainer.appendChild(groupDiv);
        }
 
-       // Bouw Select Dropdowns voor Finishes en Texturen
+       // Bouw Select Dropdowns voor Finishes en Knoppen (Swatches) voor Texturen
        for (const [category, data] of Object.entries(groupedSelects)) {
            const groupDiv = document.createElement('div');
            groupDiv.className = 'option-group';
@@ -325,58 +331,80 @@
            label.textContent = category + ':';
            groupDiv.appendChild(label);
 
-           const select = document.createElement('select');
-           select.className = 'config-select dynamic-option visual-select-option';
-           select.setAttribute('data-category', category);
-           select.setAttribute('data-type', data.type);
-           select.setAttribute('data-index', data.index);
-           if(data.texType) select.setAttribute('data-texture-type', data.texType);
+           if (data.type === 'texture') {
+               const btnContainer = document.createElement('div');
+               btnContainer.className = 'color-options-container';
 
-           data.options.forEach((opt, index) => {
-               const optionEl = document.createElement('option');
-               optionEl.value = opt.title;
-               optionEl.textContent = opt.title;
-               optionEl.setAttribute('data-code', opt.code);
+               data.options.forEach((opt, index) => {
+                   const btn = document.createElement('button');
+                   btn.type = 'button';
+                   btn.className = 'texture-btn dynamic-option';
+                   if (index === 0) btn.classList.add('active');
 
-               if(data.type === 'finish') {
-                   optionEl.setAttribute('data-roughness', opt.roughness);
-               } else if (data.type === 'texture') {
-                   optionEl.setAttribute('data-image-url', opt.url);
-               }
-               select.appendChild(optionEl);
+                   // Als er een afbeelding is, toon deze als achtergrond, anders een lege kleur/icoon
+                   if (opt.url && opt.url !== "") {
+                       btn.style.backgroundImage = `url(${opt.url})`;
+                   } else {
+                       btn.style.backgroundColor = '#e0e0e0';
+                       btn.textContent = '∅';
+                   }
+                   btn.title = opt.title;
 
-               // Set initial state
-               if(index === 0) {
-                   if(data.type === 'finish') activeFinishes[data.index] = { roughness: opt.roughness, label: opt.title, code: opt.code, category: category };
-                   if(data.type === 'texture') activeTextures[data.index] = { url: opt.url, type: data.texType, label: opt.title, code: opt.code, category: category };
-               }
-           });
+                   btn.addEventListener('click', function() {
+                      Array.from(btnContainer.children).forEach(c => c.classList.remove('active'));
+                      this.classList.add('active');
+                      activeTextures[data.index] = { url: opt.url, type: data.texType, label: opt.title, code: opt.code, category: category, price: opt.price };
+                      updateConfigurator();
+                   });
 
-           select.addEventListener('change', function() {
-               const selectedOpt = this.options[this.selectedIndex];
-               const dType = this.getAttribute('data-type');
-               const dIdx = this.getAttribute('data-index');
+                   btnContainer.appendChild(btn);
+                   if(index === 0) activeTextures[data.index] = { url: opt.url, type: data.texType, label: opt.title, code: opt.code, category: category, price: opt.price };
+               });
+               groupDiv.appendChild(btnContainer);
+           } else {
+               const select = document.createElement('select');
+               select.className = 'config-select dynamic-option visual-select-option';
+               select.setAttribute('data-category', category);
+               select.setAttribute('data-type', data.type);
+               select.setAttribute('data-index', data.index);
 
-               if(dType === 'finish') {
-                   activeFinishes[dIdx] = {
-                       roughness: selectedOpt.getAttribute('data-roughness'),
-                       label: selectedOpt.value,
-                       code: selectedOpt.getAttribute('data-code'),
-                       category: category
-                   };
-               } else if (dType === 'texture') {
-                   activeTextures[dIdx] = {
-                       url: selectedOpt.getAttribute('data-image-url'),
-                       type: this.getAttribute('data-texture-type'),
-                       label: selectedOpt.value,
-                       code: selectedOpt.getAttribute('data-code'),
-                       category: category
-                   };
-               }
-               updateConfigurator();
-           });
+               data.options.forEach((opt, index) => {
+                   const optionEl = document.createElement('option');
+                   optionEl.value = opt.title;
+                   optionEl.textContent = opt.title + (opt.price > 0 ? ` (+€ ${(opt.price/100).toFixed(2).replace('.', ',')})` : '');
+                   optionEl.setAttribute('data-code', opt.code);
+                   optionEl.setAttribute('data-extra-price', opt.price);
 
-           groupDiv.appendChild(select);
+                   if(data.type === 'finish') {
+                       optionEl.setAttribute('data-roughness', opt.roughness);
+                   }
+                   select.appendChild(optionEl);
+
+                   // Set initial state
+                   if(index === 0) {
+                       if(data.type === 'finish') activeFinishes[data.index] = { roughness: opt.roughness, label: opt.title, code: opt.code, category: category, price: opt.price };
+                   }
+               });
+
+               select.addEventListener('change', function() {
+                   const selectedOpt = this.options[this.selectedIndex];
+                   const dType = this.getAttribute('data-type');
+                   const dIdx = this.getAttribute('data-index');
+
+                   if(dType === 'finish') {
+                       activeFinishes[dIdx] = {
+                           roughness: selectedOpt.getAttribute('data-roughness'),
+                           label: selectedOpt.value.split(' (+')[0], // strip price label
+                           code: selectedOpt.getAttribute('data-code'),
+                           category: category,
+                           price: parseInt(selectedOpt.getAttribute('data-extra-price') || "0")
+                       };
+                   }
+                   updateConfigurator();
+               });
+
+               groupDiv.appendChild(select);
+           }
            if(visualSelectContainer) visualSelectContainer.appendChild(groupDiv);
        }
     }
@@ -588,13 +616,16 @@
 
       // 4. Verwerk niet-visuele opties
       let nonVisualCodes = [];
+      let extraNonVisualPrice = 0;
       nonVisualSelects.forEach(select => {
           const category = select.getAttribute('data-category');
           const selectedOpt = select.options[select.selectedIndex];
           if(selectedOpt) {
               const label = selectedOpt.value;
               const code = selectedOpt.getAttribute('data-code');
-              nonVisualData[category] = { label: label, code: code };
+              const price = parseInt(selectedOpt.getAttribute('data-extra-price') || "0");
+              extraNonVisualPrice += price;
+              nonVisualData[category] = { label: label, code: code, price: price };
               nonVisualCodes.push(code);
           }
       });
@@ -612,7 +643,19 @@
       hiddenBuildCode.value = finalCode;
 
       // 6. Prijs updaten
-      const totalPrice = basePriceCents + extraPrice;
+      let totalExtraOptionsPrice = extraNonVisualPrice;
+
+      for (const [idxStr, colorData] of Object.entries(activeColors)) {
+         totalExtraOptionsPrice += (colorData.price || 0);
+      }
+      for (const [idxStr, finishData] of Object.entries(activeFinishes)) {
+         totalExtraOptionsPrice += (finishData.price || 0);
+      }
+      for (const [idxStr, texData] of Object.entries(activeTextures)) {
+         totalExtraOptionsPrice += (texData.price || 0);
+      }
+
+      const totalPrice = basePriceCents + extraPrice + totalExtraOptionsPrice;
       if (priceDisplay && totalPrice > 0) {
           priceDisplay.textContent = formatMoney(totalPrice);
       }
@@ -790,6 +833,13 @@
           "id": "color_hex",
           "label": "Kies de Kleur",
           "default": "#000000"
+        },
+        {
+          "type": "number",
+          "id": "extra_price",
+          "label": "Meerprijs (in centen)",
+          "info": "Bijv. 1000 voor €10,00 extra",
+          "default": 0
         }
       ]
     },
@@ -825,6 +875,13 @@
           "label": "Ruwheid (Roughness)",
           "info": "0 is spiegelend/glans, 1 is volledig mat.",
           "default": 0.5
+        },
+        {
+          "type": "number",
+          "id": "extra_price",
+          "label": "Meerprijs (in centen)",
+          "info": "Bijv. 1000 voor €10,00 extra",
+          "default": 0
         }
       ]
     },
@@ -866,6 +923,13 @@
           "id": "texture_image",
           "label": "Kies de textuur afbeelding",
           "info": "Zorg dat de afmeting een macht van 2 is (bijv 512x512 of 1024x1024) voor beste performance. Laat leeg voor 'Geen overlaag'."
+        },
+        {
+          "type": "number",
+          "id": "extra_price",
+          "label": "Meerprijs (in centen)",
+          "info": "Bijv. 1000 voor €10,00 extra",
+          "default": 0
         }
       ]
     },
@@ -884,6 +948,13 @@
           "id": "options",
           "label": "Keuzes (komma-gescheiden)",
           "info": "Formaat: Label:Waarde, Label2:Waarde2. Bijv. 75 Flex:75, 85 Flex:85 of Low-kick:LK, Mid-kick:MK"
+        },
+        {
+          "type": "number",
+          "id": "extra_price",
+          "label": "Meerprijs (in centen)",
+          "info": "Bijv. 1000 voor €10,00 extra",
+          "default": 0
         }
       ]
     }
