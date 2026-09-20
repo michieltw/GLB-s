@@ -30,15 +30,13 @@
           👋 Bekijk in je kamer (AR)
         </button>
 
-        <!-- Voorbeeld Hotspot (Optioneel, gericht op het blad) -->
-        <button class="Hotspot" slot="hotspot-blade" data-position="0 -0.5 0" data-normal="0 0 1" data-visibility-attribute="visible">
-            <div class="HotspotAnnotation">Focus op Blad</div>
-        </button>
-
       </model-viewer>
 
-      <!-- Camera Reset Button -->
-      <button id="reset-camera-btn-{{ section.id }}" class="secondary-btn" style="position: absolute; bottom: 10px; right: 10px; z-index: 10;">Reset Camera</button>
+      <!-- Overlay Controls -->
+      <div class="viewer-controls" style="position: absolute; bottom: 10px; right: 10px; z-index: 10; display: flex; gap: 10px;">
+          <button id="download-snapshot-btn-{{ section.id }}" class="secondary-btn" title="Download Foto">📸 Download</button>
+          <button id="reset-camera-btn-{{ section.id }}" class="secondary-btn" title="Reset Camera">🔄 Reset</button>
+      </div>
     </div>
 
     <!-- Options Section -->
@@ -52,12 +50,14 @@
         <!-- Gebruik de gekoppelde productvariant als we niet op een productpagina zitten -->
         {% assign variant_id = product.selected_or_first_available_variant.id | default: section.settings.base_product.selected_or_first_available_variant.id %}
         <input type="hidden" name="id" value="{{ variant_id }}">
+
         <!-- Lijnitem eigenschappen (voor winkelwagen) -->
         <input type="hidden" name="properties[Build Code]" id="hidden-build-code-{{ section.id }}" value="">
         <input type="hidden" name="properties[Model]" id="hidden-model-{{ section.id }}" value="">
-        <input type="hidden" name="properties[Kleur]" id="hidden-color-{{ section.id }}" value="">
         <input type="hidden" name="properties[Zijde]" id="hidden-side-{{ section.id }}" value="">
         <input type="hidden" name="properties[Lengte]" id="hidden-length-{{ section.id }}" value="">
+
+        <!-- Dynamische hidden inputs voor kleuren worden via JS gegenereerd om meerdere materialen te ondersteunen -->
 
         <!-- Stick Modellen Selectie -->
         <div class="option-group">
@@ -80,12 +80,13 @@
         <div class="option-group">
           <label>Zijde (Links/Rechts):</label>
           <div class="radio-group" id="side-options-{{ section.id }}">
+             <!-- Slimme camera transitie: we sturen de camera naar een specifieke hoek bij een zijde wissel -->
              <label class="radio-box active">
-                <input type="radio" name="side_selection" value="1" data-label="Links" data-code="L" class="dynamic-option" checked style="display:none;">
+                <input type="radio" name="side_selection" value="1" data-label="Links" data-code="L" data-camera-orbit="-45deg 75deg 105%" class="dynamic-option" checked style="display:none;">
                 Links
              </label>
              <label class="radio-box">
-                <input type="radio" name="side_selection" value="-1" data-label="Rechts" data-code="R" class="dynamic-option" style="display:none;">
+                <input type="radio" name="side_selection" value="-1" data-label="Rechts" data-code="R" data-camera-orbit="45deg 75deg 105%" class="dynamic-option" style="display:none;">
                 Rechts
              </label>
           </div>
@@ -110,30 +111,24 @@
           </div>
         </div>
 
-        <!-- Kleur Selectie -->
-        <div class="option-group">
-          <label>Kies een kleur:</label>
-          <div class="color-options-container" id="color-options-{{ section.id }}">
-            {% assign has_colors = false %}
-            {% for block in section.blocks %}
-              {% if block.type == 'color_option' %}
-                {% assign has_colors = true %}
-                <button
-                  type="button"
-                  class="color-btn dynamic-option"
-                  data-color="{{ block.settings.color_hex }}"
-                  data-label="{{ block.settings.title }}"
-                  data-code="{{ block.settings.title | slice: 0, 3 | upcase }}"
-                  style="background-color: {{ block.settings.color_hex }};"
-                  title="{{ block.settings.title }}"
-                  aria-label="Kleur: {{ block.settings.title }}"
-                ></button>
-              {% endif %}
-            {% endfor %}
-            {% if has_colors == false %}
-              <p>Geen kleuren beschikbaar</p>
+        <!-- Multi-Materiaal Kleur Selectie -->
+        <!-- We bouwen dynamisch kleur groepen op basis van de materiaal_index in het schema -->
+        <div id="multi-color-container-{{ section.id }}">
+          <!-- Wordt gevuld via JS om de blokken per materiaal te groeperen -->
+        </div>
+
+        <!-- Verborgen container voor alle kleurblok data uit Liquid zodat JS het kan parsen -->
+        <div id="color-data-{{ section.id }}" style="display:none;">
+          {% for block in section.blocks %}
+            {% if block.type == 'color_option' %}
+              <div class="color-data-item"
+                   data-title="{{ block.settings.title }}"
+                   data-hex="{{ block.settings.color_hex }}"
+                   data-index="{{ block.settings.material_index }}"
+                   data-category="{{ block.settings.category_name }}">
+              </div>
             {% endif %}
-          </div>
+          {% endfor %}
         </div>
 
         <!-- Build Code Display -->
@@ -163,7 +158,7 @@
   .option-group label { display: block; font-weight: bold; margin-bottom: 0.5rem; }
   .config-select { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; background-color: #fafafa; }
 
-  .color-options-container { display: flex; flex-wrap: wrap; gap: 10px; }
+  .color-options-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
   .color-btn { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #ccc; cursor: pointer; transition: transform 0.2s, border-color 0.2s; }
   .color-btn:hover { transform: scale(1.1); }
   .color-btn.active { border-color: #000; box-shadow: 0 0 0 2px #000; }
@@ -177,17 +172,9 @@
 
   .configurator-submit-btn { width: 100%; padding: 1rem; font-size: 1.2rem; font-weight: bold; color: #fff; background-color: #000; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
   .configurator-submit-btn:hover { background-color: #333; }
-  .secondary-btn { padding: 8px 16px; background: rgba(255,255,255,0.8); border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+  .secondary-btn { padding: 8px 16px; background: rgba(255,255,255,0.9); border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-weight: bold; }
+  .secondary-btn:hover { background: #fff; border-color: #000; }
 
-  /* Hotspot Styling */
-  .Hotspot { background: #fff; border-radius: 32px; border: 0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); box-sizing: border-box; cursor: pointer; height: 24px; padding: 8px; position: relative; transition: opacity 0.3s; width: 24px; }
-  .Hotspot:not([data-visible]) { background: transparent; border: 4px solid #fff; box-shadow: none; height: 32px; pointer-events: none; width: 32px; }
-  .Hotspot:focus { border: 4px solid rgb(0, 128, 200); height: 32px; outline: none; width: 32px; }
-  .Hotspot > * { opacity: 1; transform: translateY(-50%); }
-  .HotspotAnnotation{ background: #fff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); color: rgba(0, 0, 0, 0.8); display: block; font-family: Futura, Helvetica Neue, sans-serif; font-size: 18px; font-weight: 700; left: calc(100% + 1em); max-width: 128px; overflow-wrap: break-word; padding: 0.5em 1em; position: absolute; top: 50%; width: max-content; }
-  .Hotspot:not([data-visible]) > * { opacity: 0; pointer-events: none; transform: translateY(calc(-50% + 4px)); transition: transform 0.3s, opacity 0.3s; }
-
-  /* AR Button Styling */
   .ar-button { background-color: white; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.25); color: rgba(0,0,0,0.8); display: block; font-size: 14px; font-weight: 500; left: 50%; bottom: 20px; padding: 10px 20px; position: absolute; transform: translateX(-50%); }
 </style>
 
@@ -198,26 +185,93 @@
 
     // UI Elements
     const stickSelect = document.getElementById(`stick-model-select-${sectionId}`);
-    const colorContainer = document.getElementById(`color-options-${sectionId}`);
     const sideInputs = document.querySelectorAll(`input[name="side_selection"]`);
     const lengthInputs = document.querySelectorAll(`input[name="length_selection"]`);
     const buildCodeDisplay = document.getElementById(`build-code-display-${sectionId}`);
     const priceDisplay = document.getElementById(`live-price-${sectionId}`);
+    const multiColorContainer = document.getElementById(`multi-color-container-${sectionId}`);
+    const cartForm = document.getElementById(`configurator-cart-form-${sectionId}`);
 
     // Form Inputs (Hidden)
     const hiddenModel = document.getElementById(`hidden-model-${sectionId}`);
-    const hiddenColor = document.getElementById(`hidden-color-${sectionId}`);
     const hiddenSide = document.getElementById(`hidden-side-${sectionId}`);
     const hiddenLength = document.getElementById(`hidden-length-${sectionId}`);
     const hiddenBuildCode = document.getElementById(`hidden-build-code-${sectionId}`);
 
-    const basePriceCents = {{ section.settings.base_price | default: 0 }}; // In format Shopify outputs natively or assuming minor units depending on setup. Let's use simple numbers.
+    const basePriceCents = {{ section.settings.base_price | default: 0 }};
     const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
 
     // State
-    let activeColorHex = null;
-    let activeColorCode = "";
-    let activeColorLabel = "";
+    // activeColors bewaart per materiaal_index de gekozen hex, label en code.
+    let activeColors = {};
+
+    // 1. Initialiseer Multi-Materiaal Kleurgroepen vanuit HTML Data
+    function buildColorGroups() {
+       const colorItems = document.querySelectorAll(`#color-data-${sectionId} .color-data-item`);
+       let groupedColors = {};
+
+       colorItems.forEach(item => {
+           const cat = item.getAttribute('data-category') || "Kleur";
+           const idx = item.getAttribute('data-index') || "0";
+           const hex = item.getAttribute('data-hex');
+           const title = item.getAttribute('data-title');
+           const code = title ? title.substring(0,3).toUpperCase() : "COL";
+
+           if(!groupedColors[cat]) groupedColors[cat] = { index: idx, options: [] };
+           groupedColors[cat].options.push({ hex, title, code });
+       });
+
+       for (const [category, data] of Object.entries(groupedColors)) {
+           const groupDiv = document.createElement('div');
+           groupDiv.className = 'option-group';
+
+           const label = document.createElement('label');
+           label.textContent = category + ':';
+           groupDiv.appendChild(label);
+
+           const btnContainer = document.createElement('div');
+           btnContainer.className = 'color-options-container';
+
+           data.options.forEach((opt, index) => {
+               const btn = document.createElement('button');
+               btn.type = 'button';
+               btn.className = 'color-btn dynamic-option';
+               if (index === 0) btn.classList.add('active'); // Eerste actief
+
+               btn.style.backgroundColor = opt.hex;
+               btn.title = opt.title;
+               btn.setAttribute('data-color', opt.hex);
+               btn.setAttribute('data-label', opt.title);
+               btn.setAttribute('data-code', opt.code);
+               btn.setAttribute('data-material-index', data.index);
+               btn.setAttribute('data-category', category);
+
+               // Klik gedrag
+               btn.addEventListener('click', function() {
+                  Array.from(btnContainer.children).forEach(c => c.classList.remove('active'));
+                  this.classList.add('active');
+
+                  activeColors[data.index] = {
+                      hex: opt.hex,
+                      label: opt.title,
+                      code: opt.code,
+                      category: category
+                  };
+                  updateConfigurator();
+               });
+
+               btnContainer.appendChild(btn);
+
+               // Set initial state
+               if(index === 0) {
+                   activeColors[data.index] = { hex: opt.hex, label: opt.title, code: opt.code, category: category };
+               }
+           });
+
+           groupDiv.appendChild(btnContainer);
+           multiColorContainer.appendChild(groupDiv);
+       }
+    }
 
     function hexToRgbA(hex) {
       if (!hex || !hex.startsWith('#')) return null;
@@ -231,9 +285,23 @@
       return null;
     }
 
-    // Money formatter (Basic fallback)
     function formatMoney(cents) {
         return "€ " + (cents / 100).toFixed(2).replace('.', ',');
+    }
+
+    // Update verborgen formulier velden voor kleuren zodat cart ze oppikt
+    function updateHiddenColorInputs() {
+        // Verwijder oude kleur inputs
+        document.querySelectorAll(`.dynamic-hidden-color-${sectionId}`).forEach(el => el.remove());
+
+        for (const [idx, colorData] of Object.entries(activeColors)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `properties[${colorData.category}]`;
+            input.value = colorData.label;
+            input.className = `dynamic-hidden-color-${sectionId}`;
+            cartForm.appendChild(input);
+        }
     }
 
     // Hoofdfunctie voor updates
@@ -244,9 +312,7 @@
       const selectedOption = stickSelect.options[stickSelect.selectedIndex];
       const filename = selectedOption.value;
       const modelLabel = selectedOption.getAttribute('data-label') || '';
-      // Voor de buildcode: probeer de eerste 3 letters, anders gewoon de value
       const modelCode = (modelLabel.length > 0) ? modelLabel.replace(/[^a-zA-Z0-9]/g, '').substring(0,3).toUpperCase() : "MOD";
-
       const extraPrice = parseInt(selectedOption.getAttribute('data-price') || "0");
 
       if (filename) {
@@ -258,7 +324,7 @@
       }
       hiddenModel.value = modelLabel;
 
-      // 2. Transformaties (Schaal & Spiegeling)
+      // 2. Transformaties (Schaal & Spiegeling & Slimme Camera)
       let scaleX = 1;
       let scaleY = 1;
       let sideLabel = "Links";
@@ -271,8 +337,15 @@
              scaleX = parseFloat(input.value);
              sideLabel = input.getAttribute('data-label');
              sideCode = input.getAttribute('data-code');
-             // Update UI parent
              input.closest('.radio-box').classList.add('active');
+
+             // Slimme camera: Kijk naar de kant van de blade (gesimuleerd door orbit aan te passen)
+             const targetOrbit = input.getAttribute('data-camera-orbit');
+             if(targetOrbit && modelViewer.cameraOrbit !== targetOrbit) {
+                 // Wacht even tot model geladen is, of forceer
+                 modelViewer.cameraTarget = "auto auto auto";
+                 modelViewer.cameraOrbit = targetOrbit;
+             }
          } else {
              input.closest('.radio-box').classList.remove('active');
          }
@@ -293,73 +366,61 @@
 
       modelViewer.scale = `${scaleX} ${scaleY} 1`;
 
-      // 3. Kleur Toepassen
-      if (activeColorHex) {
-         const rgba = hexToRgbA(activeColorHex);
-         if (rgba && modelViewer.model && modelViewer.model.materials) {
-            const material = modelViewer.model.materials[0];
-            if (material) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+      // 3. Multi-Materiaal Kleuren Toepassen
+      if (modelViewer.model && modelViewer.model.materials) {
+         for (const [idxStr, colorData] of Object.entries(activeColors)) {
+             const idx = parseInt(idxStr);
+             const material = modelViewer.model.materials[idx];
+             if (material) {
+                 const rgba = hexToRgbA(colorData.hex);
+                 if (rgba) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+             }
          }
-         modelViewer.dataset.currentColor = JSON.stringify(rgba);
+         // Save state for reload
+         modelViewer.dataset.currentColors = JSON.stringify(activeColors);
       }
-      hiddenColor.value = activeColorLabel;
+
+      updateHiddenColorInputs();
 
       // 4. Build Code Genereren
-      const parts = [modelCode, lengthCode, sideCode, activeColorCode];
+      let colorCodes = Object.values(activeColors).map(c => c.code);
+      const parts = [modelCode, lengthCode, sideCode, ...colorCodes];
       const finalCode = parts.filter(p => p).join('-');
       buildCodeDisplay.textContent = finalCode || "...";
       hiddenBuildCode.value = finalCode;
 
-      // 5. Prijs updaten (gesimuleerd)
-      // OPMERKING: base_price van de section, we rekenen hier gewoon met ruwe data als voorbeeld.
-      // Shopify vereist dat dit in de winkelwagen correct gemapt is naar varianten voor afrekening.
+      // 5. Prijs updaten
       const totalPrice = basePriceCents + extraPrice;
       if (priceDisplay && totalPrice > 0) {
           priceDisplay.textContent = formatMoney(totalPrice);
       }
     }
 
+    // Init kleuren
+    if(multiColorContainer) {
+       buildColorGroups();
+    }
+
     // Event Listeners binden
     if (stickSelect) stickSelect.addEventListener('change', updateConfigurator);
-
     sideInputs.forEach(input => input.addEventListener('change', updateConfigurator));
     lengthInputs.forEach(input => input.addEventListener('change', updateConfigurator));
 
-    if (colorContainer) {
-      const colorBtns = colorContainer.querySelectorAll('.color-btn');
-      colorBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-          colorBtns.forEach(b => b.classList.remove('active'));
-          this.classList.add('active');
-          activeColorHex = this.getAttribute('data-color');
-          activeColorCode = this.getAttribute('data-code');
-          activeColorLabel = this.getAttribute('data-label');
-          updateConfigurator();
-        });
-      });
-      // Initialiseer met de eerste kleur
-      if (colorBtns.length > 0) { colorBtns[0].click(); }
-    }
-
-    // Her-apply color after loading new model
+    // Her-apply kleuren na laden nieuw model
     if (modelViewer) {
         modelViewer.addEventListener('load', function() {
-          if (modelViewer.dataset.currentColor && modelViewer.model && modelViewer.model.materials) {
-            const rgba = JSON.parse(modelViewer.dataset.currentColor);
-            const material = modelViewer.model.materials[0];
-            if (material) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+          if (modelViewer.dataset.currentColors && modelViewer.model && modelViewer.model.materials) {
+            const savedColors = JSON.parse(modelViewer.dataset.currentColors);
+            for (const [idxStr, colorData] of Object.entries(savedColors)) {
+                const idx = parseInt(idxStr);
+                const material = modelViewer.model.materials[idx];
+                if (material) {
+                    const rgba = hexToRgbA(colorData.hex);
+                    if (rgba) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+                }
+            }
           }
         });
-
-        // Hotspot klik-gedrag: focus camera
-        const hotspot = modelViewer.querySelector('.Hotspot');
-        if (hotspot) {
-            hotspot.addEventListener('click', () => {
-                modelViewer.cameraTarget = hotspot.dataset.position;
-                // Optioneel: zoom wat in
-                modelViewer.cameraOrbit = "45deg 75deg 50%";
-            });
-        }
 
         // Reset camera knop
         const resetBtn = document.getElementById(`reset-camera-btn-${sectionId}`);
@@ -367,6 +428,27 @@
             resetBtn.addEventListener('click', () => {
                 modelViewer.cameraTarget = "auto auto auto";
                 modelViewer.cameraOrbit = "0deg 75deg 105%";
+            });
+        }
+
+        // Snapshot download knop
+        const downloadBtn = document.getElementById(`download-snapshot-btn-${sectionId}`);
+        if(downloadBtn) {
+            downloadBtn.addEventListener('click', async () => {
+                try {
+                    const blob = await modelViewer.toBlob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Mijn-Stick-Configuratie.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (err) {
+                    console.error("Fout bij downloaden snapshot", err);
+                    alert("Downloaden is momenteel niet gelukt. Probeer het opnieuw.");
+                }
             });
         }
     }
@@ -378,7 +460,7 @@
 
 {% schema %}
 {
-  "name": "3D Product Customizer V2",
+  "name": "3D Product Customizer V3",
   "settings": [
     {
       "type": "text",
@@ -434,8 +516,22 @@
     },
     {
       "type": "color_option",
-      "name": "Kleur Optie",
+      "name": "Kleur (Multi-Materiaal)",
       "settings": [
+        {
+          "type": "text",
+          "id": "category_name",
+          "label": "Categorie Naam",
+          "info": "Bijv. 'Shaft Kleur' of 'Tape Kleur'. Kleuren met dezelfde categorie komen samen in één rij.",
+          "default": "Shaft Kleur"
+        },
+        {
+          "type": "number",
+          "id": "material_index",
+          "label": "Materiaal Index",
+          "info": "De index van het materiaal in het 3D model. Vaak is 0 de basis, 1 een accentkleur, etc.",
+          "default": 0
+        },
         {
           "type": "text",
           "id": "title",
@@ -453,7 +549,7 @@
   ],
   "presets": [
     {
-      "name": "3D Product Customizer V2",
+      "name": "3D Product Customizer V3",
       "category": "Product"
     }
   ]
