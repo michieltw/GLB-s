@@ -57,8 +57,6 @@
         <input type="hidden" name="properties[Zijde]" id="hidden-side-{{ section.id }}" value="">
         <input type="hidden" name="properties[Lengte]" id="hidden-length-{{ section.id }}" value="">
 
-        <!-- Dynamische hidden inputs voor kleuren worden via JS gegenereerd om meerdere materialen te ondersteunen -->
-
         <!-- Stick Modellen Selectie -->
         <div class="option-group">
           <label for="stick-model-select-{{ section.id }}">Kies je model:</label>
@@ -131,19 +129,42 @@
           {% endif %}
         {% endfor %}
 
+        <!-- Visuele Dropdowns voor Texturen (Afbeeldingen) en Finishes (Roughness) -->
+        <div id="visual-select-container-{{ section.id }}">
+           <!-- Wordt gevuld via JS op basis van texture_option en finish_option blokken -->
+        </div>
+
         <!-- Multi-Materiaal Kleur Selectie -->
         <!-- We bouwen dynamisch kleur groepen op basis van de materiaal_index in het schema -->
         <div id="multi-color-container-{{ section.id }}">
           <!-- Wordt gevuld via JS om de blokken per materiaal te groeperen -->
         </div>
 
-        <!-- Verborgen container voor alle kleurblok data uit Liquid zodat JS het kan parsen -->
-        <div id="color-data-{{ section.id }}" style="display:none;">
+        <!-- Verborgen container voor alle blok data uit Liquid zodat JS het kan parsen -->
+        <div id="block-data-{{ section.id }}" style="display:none;">
           {% for block in section.blocks %}
             {% if block.type == 'color_option' %}
-              <div class="color-data-item"
+              <div class="block-data-item"
+                   data-type="color"
                    data-title="{{ block.settings.title }}"
                    data-hex="{{ block.settings.color_hex }}"
+                   data-index="{{ block.settings.material_index }}"
+                   data-category="{{ block.settings.category_name }}">
+              </div>
+            {% elsif block.type == 'finish_option' %}
+              <div class="block-data-item"
+                   data-type="finish"
+                   data-title="{{ block.settings.title }}"
+                   data-roughness="{{ block.settings.roughness }}"
+                   data-index="{{ block.settings.material_index }}"
+                   data-category="{{ block.settings.category_name }}">
+              </div>
+            {% elsif block.type == 'texture_option' %}
+              <div class="block-data-item"
+                   data-type="texture"
+                   data-title="{{ block.settings.title }}"
+                   data-image-url="{% if block.settings.texture_image != blank %}{{ block.settings.texture_image | img_url: 'master' }}{% endif %}"
+                   data-texture-type="{{ block.settings.texture_type }}"
                    data-index="{{ block.settings.material_index }}"
                    data-category="{{ block.settings.category_name }}">
               </div>
@@ -210,6 +231,7 @@
     const buildCodeDisplay = document.getElementById(`build-code-display-${sectionId}`);
     const priceDisplay = document.getElementById(`live-price-${sectionId}`);
     const multiColorContainer = document.getElementById(`multi-color-container-${sectionId}`);
+    const visualSelectContainer = document.getElementById(`visual-select-container-${sectionId}`);
     const cartForm = document.getElementById(`configurator-cart-form-${sectionId}`);
 
     // Form Inputs (Hidden)
@@ -223,34 +245,53 @@
     const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
 
     // State
-    // activeColors bewaart per materiaal_index de gekozen hex, label en code.
     let activeColors = {};
+    let activeFinishes = {};
+    let activeTextures = {};
     let nonVisualData = {};
 
-    // 1. Initialiseer Multi-Materiaal Kleurgroepen vanuit HTML Data
-    function buildColorGroups() {
-       const colorItems = document.querySelectorAll(`#color-data-${sectionId} .color-data-item`);
+    // In-memory cache om texture objecten te bewaren
+    let textureCache = {};
+
+    // 1. Initialiseer UI groepen vanuit HTML Data
+    function buildDynamicUI() {
+       const blockItems = document.querySelectorAll(`#block-data-${sectionId} .block-data-item`);
+
        let groupedColors = {};
+       let groupedSelects = {};
 
-       colorItems.forEach(item => {
-           const cat = item.getAttribute('data-category') || "Kleur";
+       blockItems.forEach(item => {
+           const type = item.getAttribute('data-type');
+           const cat = item.getAttribute('data-category');
            const idx = item.getAttribute('data-index') || "0";
-           const hex = item.getAttribute('data-hex');
            const title = item.getAttribute('data-title');
-           const code = title ? title.substring(0,3).toUpperCase() : "COL";
+           const code = title ? title.substring(0,3).toUpperCase() : "OPT";
 
-           if(!groupedColors[cat]) groupedColors[cat] = { index: idx, options: [] };
-           groupedColors[cat].options.push({ hex, title, code });
+           if(type === 'color') {
+               const hex = item.getAttribute('data-hex');
+               if(!groupedColors[cat]) groupedColors[cat] = { index: idx, options: [] };
+               groupedColors[cat].options.push({ hex, title, code });
+           }
+           else if (type === 'finish') {
+               const roughness = item.getAttribute('data-roughness');
+               if(!groupedSelects[cat]) groupedSelects[cat] = { type: 'finish', index: idx, options: [] };
+               groupedSelects[cat].options.push({ roughness, title, code });
+           }
+           else if (type === 'texture') {
+               const url = item.getAttribute('data-image-url');
+               const texType = item.getAttribute('data-texture-type');
+               if(!groupedSelects[cat]) groupedSelects[cat] = { type: 'texture', index: idx, texType: texType, options: [] };
+               groupedSelects[cat].options.push({ url, title, code });
+           }
        });
 
+       // Bouw Kleuren Knoppen
        for (const [category, data] of Object.entries(groupedColors)) {
            const groupDiv = document.createElement('div');
            groupDiv.className = 'option-group';
-
            const label = document.createElement('label');
            label.textContent = category + ':';
            groupDiv.appendChild(label);
-
            const btnContainer = document.createElement('div');
            btnContainer.className = 'color-options-container';
 
@@ -258,40 +299,85 @@
                const btn = document.createElement('button');
                btn.type = 'button';
                btn.className = 'color-btn dynamic-option';
-               if (index === 0) btn.classList.add('active'); // Eerste actief
-
+               if (index === 0) btn.classList.add('active');
                btn.style.backgroundColor = opt.hex;
                btn.title = opt.title;
-               btn.setAttribute('data-color', opt.hex);
-               btn.setAttribute('data-label', opt.title);
-               btn.setAttribute('data-code', opt.code);
-               btn.setAttribute('data-material-index', data.index);
-               btn.setAttribute('data-category', category);
 
-               // Klik gedrag
                btn.addEventListener('click', function() {
                   Array.from(btnContainer.children).forEach(c => c.classList.remove('active'));
                   this.classList.add('active');
-
-                  activeColors[data.index] = {
-                      hex: opt.hex,
-                      label: opt.title,
-                      code: opt.code,
-                      category: category
-                  };
+                  activeColors[data.index] = { hex: opt.hex, label: opt.title, code: opt.code, category: category };
                   updateConfigurator();
                });
 
                btnContainer.appendChild(btn);
+               if(index === 0) activeColors[data.index] = { hex: opt.hex, label: opt.title, code: opt.code, category: category };
+           });
+           groupDiv.appendChild(btnContainer);
+           if(multiColorContainer) multiColorContainer.appendChild(groupDiv);
+       }
+
+       // Bouw Select Dropdowns voor Finishes en Texturen
+       for (const [category, data] of Object.entries(groupedSelects)) {
+           const groupDiv = document.createElement('div');
+           groupDiv.className = 'option-group';
+           const label = document.createElement('label');
+           label.textContent = category + ':';
+           groupDiv.appendChild(label);
+
+           const select = document.createElement('select');
+           select.className = 'config-select dynamic-option visual-select-option';
+           select.setAttribute('data-category', category);
+           select.setAttribute('data-type', data.type);
+           select.setAttribute('data-index', data.index);
+           if(data.texType) select.setAttribute('data-texture-type', data.texType);
+
+           data.options.forEach((opt, index) => {
+               const optionEl = document.createElement('option');
+               optionEl.value = opt.title;
+               optionEl.textContent = opt.title;
+               optionEl.setAttribute('data-code', opt.code);
+
+               if(data.type === 'finish') {
+                   optionEl.setAttribute('data-roughness', opt.roughness);
+               } else if (data.type === 'texture') {
+                   optionEl.setAttribute('data-image-url', opt.url);
+               }
+               select.appendChild(optionEl);
 
                // Set initial state
                if(index === 0) {
-                   activeColors[data.index] = { hex: opt.hex, label: opt.title, code: opt.code, category: category };
+                   if(data.type === 'finish') activeFinishes[data.index] = { roughness: opt.roughness, label: opt.title, code: opt.code, category: category };
+                   if(data.type === 'texture') activeTextures[data.index] = { url: opt.url, type: data.texType, label: opt.title, code: opt.code, category: category };
                }
            });
 
-           groupDiv.appendChild(btnContainer);
-           multiColorContainer.appendChild(groupDiv);
+           select.addEventListener('change', function() {
+               const selectedOpt = this.options[this.selectedIndex];
+               const dType = this.getAttribute('data-type');
+               const dIdx = this.getAttribute('data-index');
+
+               if(dType === 'finish') {
+                   activeFinishes[dIdx] = {
+                       roughness: selectedOpt.getAttribute('data-roughness'),
+                       label: selectedOpt.value,
+                       code: selectedOpt.getAttribute('data-code'),
+                       category: category
+                   };
+               } else if (dType === 'texture') {
+                   activeTextures[dIdx] = {
+                       url: selectedOpt.getAttribute('data-image-url'),
+                       type: this.getAttribute('data-texture-type'),
+                       label: selectedOpt.value,
+                       code: selectedOpt.getAttribute('data-code'),
+                       category: category
+                   };
+               }
+               updateConfigurator();
+           });
+
+           groupDiv.appendChild(select);
+           if(visualSelectContainer) visualSelectContainer.appendChild(groupDiv);
        }
     }
 
@@ -326,6 +412,26 @@
             cartForm.appendChild(input);
         }
 
+        // Finishes
+        for (const [idx, finishData] of Object.entries(activeFinishes)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `properties[${finishData.category}]`;
+            input.value = finishData.label;
+            input.className = `dynamic-hidden-property-${sectionId}`;
+            cartForm.appendChild(input);
+        }
+
+        // Texturen
+        for (const [idx, texData] of Object.entries(activeTextures)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `properties[${texData.category}]`;
+            input.value = texData.label;
+            input.className = `dynamic-hidden-property-${sectionId}`;
+            cartForm.appendChild(input);
+        }
+
         // Niet-visuele opties (Flex, Gewicht, etc.)
         for (const [category, data] of Object.entries(nonVisualData)) {
             const input = document.createElement('input');
@@ -334,6 +440,47 @@
             input.value = data.label;
             input.className = `dynamic-hidden-property-${sectionId}`;
             cartForm.appendChild(input);
+        }
+    }
+
+    // Helper om texture te creëeren via model-viewer
+    async function applyTexture(material, type, url) {
+        if (!url || url === "" || url === "null") {
+            // Verwijder texture als er geen URL is
+            if(type === 'baseColor') {
+                if(material.pbrMetallicRoughness.baseColorTexture) {
+                   material.pbrMetallicRoughness.baseColorTexture.texture.source.setURI(null);
+                }
+            } else if (type === 'normal') {
+                if(material.normalTexture) {
+                   material.normalTexture.texture.source.setURI(null);
+                }
+            }
+            return;
+        }
+
+        try {
+            let textureObj = textureCache[url];
+            if (!textureObj) {
+                textureObj = await modelViewer.createTexture(url);
+                textureCache[url] = textureObj;
+            }
+
+            // Pas de texture toe op basis van het gekozen type (baseColor is meest voorkomend voor overlagen)
+            if(type === 'baseColor') {
+                // Check of het kanaal bestaat, zo ja overschrijf de image.
+                if(material.pbrMetallicRoughness.baseColorTexture) {
+                   material.pbrMetallicRoughness.baseColorTexture.texture.source.setURI(url);
+                } else {
+                   console.warn("Model heeft geen bestaande Base Color map om te overschrijven.");
+                }
+            } else if (type === 'normal') {
+                if(material.normalTexture) {
+                   material.normalTexture.texture.source.setURI(url);
+                }
+            }
+        } catch(e) {
+            console.error("Fout bij toepassen van texture", e);
         }
     }
 
@@ -399,8 +546,10 @@
 
       modelViewer.scale = `${scaleX} ${scaleY} 1`;
 
-      // 3. Multi-Materiaal Kleuren Toepassen
+      // 3. Materialen Toepassen (Kleuren, Finishes en Texturen)
       if (modelViewer.model && modelViewer.model.materials) {
+
+         // 3A. Kleuren (Base Color)
          for (const [idxStr, colorData] of Object.entries(activeColors)) {
              const idx = parseInt(idxStr);
              const material = modelViewer.model.materials[idx];
@@ -409,8 +558,32 @@
                  if (rgba) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
              }
          }
-         // Save state for reload
+
+         // 3B. Finishes (Roughness / Glans)
+         for (const [idxStr, finishData] of Object.entries(activeFinishes)) {
+             const idx = parseInt(idxStr);
+             const material = modelViewer.model.materials[idx];
+             if (material) {
+                 const rgh = parseFloat(finishData.roughness);
+                 if (!isNaN(rgh)) material.pbrMetallicRoughness.setRoughnessFactor(rgh);
+             }
+         }
+
+         // 3C. Texturen (Overlagen)
+         for (const [idxStr, texData] of Object.entries(activeTextures)) {
+             const idx = parseInt(idxStr);
+             const material = modelViewer.model.materials[idx];
+             if (material) {
+                 // Deze call is asynchroon. We vuren af en vergeten voor UI snappyness,
+                 // maar hij past hem netjes toe als hij geladen is.
+                 applyTexture(material, texData.type, texData.url);
+             }
+         }
+
+         // Sla state op voor reload
          modelViewer.dataset.currentColors = JSON.stringify(activeColors);
+         modelViewer.dataset.currentFinishes = JSON.stringify(activeFinishes);
+         modelViewer.dataset.currentTextures = JSON.stringify(activeTextures);
       }
 
       // 4. Verwerk niet-visuele opties
@@ -428,24 +601,25 @@
 
       updateHiddenDynamicInputs();
 
-      // 5. Build Code Genereren (Inclusief non-visuals)
+      // 5. Build Code Genereren (Inclusief visuals & non-visuals)
       let colorCodes = Object.values(activeColors).map(c => c.code);
-      const parts = [modelCode, lengthCode, sideCode, ...nonVisualCodes, ...colorCodes];
+      let finishCodes = Object.values(activeFinishes).map(c => c.code);
+      let textureCodes = Object.values(activeTextures).map(c => c.code);
+
+      const parts = [modelCode, lengthCode, sideCode, ...finishCodes, ...textureCodes, ...nonVisualCodes, ...colorCodes];
       const finalCode = parts.filter(p => p).join('-');
       buildCodeDisplay.textContent = finalCode || "...";
       hiddenBuildCode.value = finalCode;
 
-      // 5. Prijs updaten
+      // 6. Prijs updaten
       const totalPrice = basePriceCents + extraPrice;
       if (priceDisplay && totalPrice > 0) {
           priceDisplay.textContent = formatMoney(totalPrice);
       }
     }
 
-    // Init kleuren
-    if(multiColorContainer) {
-       buildColorGroups();
-    }
+    // Init dynamische form UI
+    buildDynamicUI();
 
     // Event Listeners binden
     if (stickSelect) stickSelect.addEventListener('change', updateConfigurator);
@@ -453,19 +627,45 @@
     lengthInputs.forEach(input => input.addEventListener('change', updateConfigurator));
     nonVisualSelects.forEach(select => select.addEventListener('change', updateConfigurator));
 
-    // Her-apply kleuren na laden nieuw model
+    // Her-apply material data na laden nieuw model
     if (modelViewer) {
         modelViewer.addEventListener('load', function() {
-          if (modelViewer.dataset.currentColors && modelViewer.model && modelViewer.model.materials) {
-            const savedColors = JSON.parse(modelViewer.dataset.currentColors);
-            for (const [idxStr, colorData] of Object.entries(savedColors)) {
-                const idx = parseInt(idxStr);
-                const material = modelViewer.model.materials[idx];
-                if (material) {
-                    const rgba = hexToRgbA(colorData.hex);
-                    if (rgba) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+          if (modelViewer.model && modelViewer.model.materials) {
+
+             // Restore Colors
+             if (modelViewer.dataset.currentColors) {
+                const savedColors = JSON.parse(modelViewer.dataset.currentColors);
+                for (const [idxStr, colorData] of Object.entries(savedColors)) {
+                    const material = modelViewer.model.materials[parseInt(idxStr)];
+                    if (material) {
+                        const rgba = hexToRgbA(colorData.hex);
+                        if (rgba) material.pbrMetallicRoughness.setBaseColorFactor(rgba);
+                    }
                 }
-            }
+             }
+
+             // Restore Finishes
+             if (modelViewer.dataset.currentFinishes) {
+                const savedFinishes = JSON.parse(modelViewer.dataset.currentFinishes);
+                for (const [idxStr, finishData] of Object.entries(savedFinishes)) {
+                    const material = modelViewer.model.materials[parseInt(idxStr)];
+                    if (material) {
+                        const rgh = parseFloat(finishData.roughness);
+                        if (!isNaN(rgh)) material.pbrMetallicRoughness.setRoughnessFactor(rgh);
+                    }
+                }
+             }
+
+             // Restore Textures
+             if (modelViewer.dataset.currentTextures) {
+                const savedTextures = JSON.parse(modelViewer.dataset.currentTextures);
+                for (const [idxStr, texData] of Object.entries(savedTextures)) {
+                    const material = modelViewer.model.materials[parseInt(idxStr)];
+                    if (material) {
+                        applyTexture(material, texData.type, texData.url);
+                    }
+                }
+             }
           }
         });
 
@@ -507,7 +707,7 @@
 
 {% schema %}
 {
-  "name": "3D Product Customizer V3",
+  "name": "3D Product Customizer V4",
   "settings": [
     {
       "type": "text",
@@ -594,6 +794,82 @@
       ]
     },
     {
+      "type": "finish_option",
+      "name": "Finish (Ruwheid/Glans)",
+      "settings": [
+        {
+          "type": "text",
+          "id": "category_name",
+          "label": "Categorie Naam",
+          "info": "Bijv. 'Shaft Finish'. Finishes met dezelfde categorie komen in 1 dropdown.",
+          "default": "Shaft Finish"
+        },
+        {
+          "type": "number",
+          "id": "material_index",
+          "label": "Materiaal Index",
+          "default": 0
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Optie Naam",
+          "info": "Bijv. 'Mat' of 'Hoogglans'"
+        },
+        {
+          "type": "range",
+          "id": "roughness",
+          "min": 0,
+          "max": 1,
+          "step": 0.1,
+          "label": "Ruwheid (Roughness)",
+          "info": "0 is spiegelend/glans, 1 is volledig mat.",
+          "default": 0.5
+        }
+      ]
+    },
+    {
+      "type": "texture_option",
+      "name": "Overlaag (Textuur Afb.)",
+      "settings": [
+        {
+          "type": "text",
+          "id": "category_name",
+          "label": "Categorie Naam",
+          "info": "Bijv. 'Shaft Patroon'",
+          "default": "Shaft Patroon"
+        },
+        {
+          "type": "number",
+          "id": "material_index",
+          "label": "Materiaal Index",
+          "default": 0
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Optie Naam",
+          "info": "Bijv. 'Geen patroon' of 'Carbon Vissengraat'"
+        },
+        {
+          "type": "select",
+          "id": "texture_type",
+          "label": "Textuur Type",
+          "options": [
+            { "value": "baseColor", "label": "Kleur / Patroon (Base Color)" },
+            { "value": "normal", "label": "Reliëf / Diepte (Normal Map)" }
+          ],
+          "default": "baseColor"
+        },
+        {
+          "type": "image_picker",
+          "id": "texture_image",
+          "label": "Kies de textuur afbeelding",
+          "info": "Zorg dat de afmeting een macht van 2 is (bijv 512x512 of 1024x1024) voor beste performance. Laat leeg voor 'Geen overlaag'."
+        }
+      ]
+    },
+    {
       "type": "text_option",
       "name": "Specificatie (Niet-visueel)",
       "settings": [
@@ -614,7 +890,7 @@
   ],
   "presets": [
     {
-      "name": "3D Product Customizer V4",
+      "name": "3D Product Customizer V5",
       "category": "Product"
     }
   ]
