@@ -115,6 +115,22 @@
           </div>
         </div>
 
+        <!-- Vrije Tekst Invoer (Naam, Nummer, etc.) -->
+        {% for block in section.blocks %}
+          {% if block.type == 'text_input_option' %}
+            <div class="option-group">
+              <label for="text-input-{{ block.id }}">{{ block.settings.title }}:</label>
+              <input type="text" id="text-input-{{ block.id }}"
+                     class="config-input dynamic-option text-input-option"
+                     data-category="{{ block.settings.title }}"
+                     data-extra-price="{{ block.settings.extra_price | default: 0 }}"
+                     maxlength="{{ block.settings.max_length | default: 20 }}"
+                     placeholder="Vul in..."
+                     style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; background-color: #fafafa; box-sizing: border-box;">
+            </div>
+          {% endif %}
+        {% endfor %}
+
         <!-- Niet-visuele specificaties (Flex, Kick-point, etc.) -->
         {% for block in section.blocks %}
           {% if block.type == 'text_option' %}
@@ -254,6 +270,7 @@
     const hiddenLength = document.getElementById(`hidden-length-${sectionId}`);
     const hiddenBuildCode = document.getElementById(`hidden-build-code-${sectionId}`);
     const nonVisualSelects = document.querySelectorAll(`.non-visual-option`);
+    const textInputSelects = document.querySelectorAll(`.text-input-option`);
 
     const basePriceCents = {{ section.settings.base_price | default: 0 }};
     const baseUrlTemplate = "{{ 'DUMMY_FILE.glb' | file_url }}";
@@ -650,6 +667,17 @@
           }
       });
 
+      textInputSelects.forEach(input => {
+          const category = input.getAttribute('data-category');
+          const val = input.value.trim();
+          if(val) {
+              const price = parseInt(input.getAttribute('data-extra-price') || "0");
+              extraNonVisualPrice += price;
+              nonVisualData[category] = { label: val, code: val, price: price };
+              nonVisualCodes.push(val.substring(0,3).toUpperCase());
+          }
+      });
+
       updateHiddenDynamicInputs();
 
       // 5. Build Code Genereren (Inclusief visuals & non-visuals)
@@ -689,6 +717,7 @@
     sideInputs.forEach(input => input.addEventListener('change', updateConfigurator));
     lengthInputs.forEach(input => input.addEventListener('change', updateConfigurator));
     nonVisualSelects.forEach(select => select.addEventListener('change', updateConfigurator));
+    textInputSelects.forEach(input => input.addEventListener('change', updateConfigurator));
 
     // Her-apply material data na laden nieuw model
     if (modelViewer) {
@@ -954,6 +983,30 @@
       ]
     },
     {
+      "type": "text_input_option",
+      "name": "Tekst Invoer (Naam/Nummer)",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Titel",
+          "info": "Bijv. 'Name tag' of 'Jersey number'"
+        },
+        {
+          "type": "number",
+          "id": "extra_price",
+          "label": "Meerprijs (in centen)",
+          "default": 0
+        },
+        {
+          "type": "number",
+          "id": "max_length",
+          "label": "Maximum aantal karakters",
+          "default": 20
+        }
+      ]
+    },
+    {
       "type": "text_option",
       "name": "Specificatie (Niet-visueel)",
       "settings": [
@@ -1083,6 +1136,19 @@
           "settings": {
             "title": "Shaft vorm",
             "options": "Default:Default, Ovaal:Ovaal, Vierkant:Vierkant, Vijfhoek:Vijfhoek, Experimenteel:Experimenteel, Dubbelloops:Dubbelloops, Junior:Junior"
+          }
+        },
+        {
+          "type": "text_input_option",
+          "settings": {
+            "title": "Name tag"
+          }
+        },
+        {
+          "type": "text_input_option",
+          "settings": {
+            "title": "Jersey number",
+            "max_length": 2
           }
         }
       ]
