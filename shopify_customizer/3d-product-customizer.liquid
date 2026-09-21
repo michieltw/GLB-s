@@ -30,6 +30,12 @@
           👋 Bekijk in je kamer (AR)
         </button>
 
+        <!-- Loading Overlay (Custom) -->
+        <div id="texture-loading-overlay-{{ section.id }}" class="texture-loading-overlay">
+           <div class="spinner"></div>
+           <span>Toepassen...</span>
+        </div>
+
       </model-viewer>
 
       <!-- Overlay Controls -->
@@ -221,6 +227,10 @@
   .secondary-btn:hover { background: #fff; border-color: #000; }
 
   .ar-button { background-color: white; border-radius: 4px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.25); color: rgba(0,0,0,0.8); display: block; font-size: 14px; font-weight: 500; left: 50%; bottom: 20px; padding: 10px 20px; position: absolute; transform: translateX(-50%); }
+
+  .texture-loading-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.7); z-index: 50; flex-direction: column; justify-content: center; align-items: center; border-radius: 8px; backdrop-filter: blur(2px); }
+  .texture-loading-overlay .spinner { border: 4px solid rgba(0, 0, 0, 0.1); width: 40px; height: 40px; border-radius: 50%; border-left-color: #000; animation: spin 1s linear infinite; margin-bottom: 10px; }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 </style>
 
 <script>
@@ -513,7 +523,9 @@
     }
 
     // Hoofdfunctie voor updates
-    function updateConfigurator() {
+    async function updateConfigurator() {
+      const loadingOverlay = document.getElementById(`texture-loading-overlay-${sectionId}`);
+      if (loadingOverlay) loadingOverlay.style.display = 'flex';
       if (!modelViewer) return;
 
       // 1. Model ophalen
@@ -598,14 +610,22 @@
          }
 
          // 3C. Texturen (Overlagen)
+         let texturePromises = [];
          for (const [idxStr, texData] of Object.entries(activeTextures)) {
              const idx = parseInt(idxStr);
              const material = modelViewer.model.materials[idx];
              if (material) {
-                 // Deze call is asynchroon. We vuren af en vergeten voor UI snappyness,
-                 // maar hij past hem netjes toe als hij geladen is.
-                 applyTexture(material, texData.type, texData.url);
+                 texturePromises.push(applyTexture(material, texData.type, texData.url));
              }
+         }
+         try {
+             if (texturePromises.length > 0) {
+                 await Promise.all(texturePromises);
+             }
+         } catch(e) {
+             console.error("Fout tijdens inladen texturen:", e);
+         } finally {
+             if (loadingOverlay) loadingOverlay.style.display = 'none';
          }
 
          // Sla state op voor reload
