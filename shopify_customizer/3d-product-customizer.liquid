@@ -21,7 +21,7 @@
         camera-target="auto auto auto"
         camera-orbit="0deg 75deg 105%"
         interpolation-decay="200"
-        style="width: 100%; height: 600px; background-color: {{ section.settings.viewer_bg_color | default: '#f4f4f4' }}; border-radius: 8px; position: relative;"
+        style="width: 100%; min-height: 400px; height: 50vh; max-height: 600px; background-color: {{ section.settings.viewer_bg_color | default: '#f4f4f4' }}; border-radius: 8px; position: relative;"
       >
         <div class="loading-poster" slot="poster">Laden...</div>
 
@@ -214,10 +214,14 @@
 </div>
 
 <style>
-  .hockey-stick-configurator { max-width: 1200px; margin: 0 auto; padding: 2rem; font-family: inherit; }
+  .hockey-stick-configurator { max-width: 1200px; margin: 0 auto; padding: 1rem; font-family: inherit; }
   .configurator-layout { display: flex; flex-direction: column; gap: 2rem; }
-  @media (min-width: 768px) { .configurator-layout { flex-direction: row; align-items: flex-start; } }
-  .viewer-section { flex: 1 1 60%; position: sticky; top: 2rem; }
+  @media (min-width: 768px) {
+      .hockey-stick-configurator { padding: 2rem; }
+      .configurator-layout { flex-direction: row; align-items: flex-start; }
+      .viewer-section { position: sticky; top: 2rem; }
+  }
+  .viewer-section { flex: 1 1 60%; position: relative; z-index: 10; }
   .options-section { flex: 1 1 40%; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
   .options-section h2 { margin-top: 0; margin-bottom: 1.5rem; font-size: 1.5rem; }
   .price-display { color: #d32f2f; font-weight: bold; }
