@@ -160,48 +160,57 @@
           {% endif %}
         {% endfor %}
 
-        <!-- Flex & Kickpoint 2D Simulator -->
+        <!-- Flex & Kickpoint 2D Simulator Button -->
         <div class="option-group" style="margin-top: 2rem;">
-          <label>Interactieve Flex & Kickpoint Simulator:</label>
-          <div class="simulator-wrapper" style="border: 1px solid #ccc; border-radius: 8px; overflow: hidden; background: #1a1a1a;">
-            <div id="canvas-container-{{ section.id }}" class="sim-canvas-container">
-                <canvas id="simCanvas-{{ section.id }}" width="600" height="400"></canvas>
-                <div id="dragTooltip-{{ section.id }}" class="sim-tooltip">Tooltip</div>
-            </div>
+          <label>Flex & Kickpoint:</label>
+          <div style="display: flex; gap: 10px; align-items: center; background: #fafafa; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+              <div id="sim-summary-{{ section.id }}" style="flex: 1; font-weight: bold; font-size: 14px;">75 Flex, Mid Kickpoint</div>
+              <button type="button" id="open-sim-modal-{{ section.id }}" class="secondary-btn" style="background-color: #000; color: #fff; border: none;">Aanpassen</button>
+          </div>
+        </div>
 
-            <div id="controls-{{ section.id }}" class="sim-controls">
-                <div class="sim-control-group">
-                    <div class="sim-header-row">
-                        <label>Swing Rotation:</label>
-                        <span class="sim-val-display" id="valRot-{{ section.id }}">0°</span>
+        <!-- Simulator Modal Container -->
+        <div id="sim-modal-{{ section.id }}" class="sim-modal" style="display: none;">
+          <div class="sim-modal-content">
+              <div class="sim-modal-header">
+                  <h3>Kies Flex & Kickpoint</h3>
+                  <button type="button" id="close-sim-modal-{{ section.id }}" class="sim-modal-close">&times;</button>
+              </div>
+              <div class="simulator-wrapper" style="overflow: hidden; background: #1a1a1a;">
+                <div id="canvas-container-{{ section.id }}" class="sim-canvas-container">
+                    <canvas id="simCanvas-{{ section.id }}" width="600" height="400"></canvas>
+                    <div id="dragTooltip-{{ section.id }}" class="sim-tooltip">Tooltip</div>
+                </div>
+
+                <div id="controls-{{ section.id }}" class="sim-controls">
+                    <div class="sim-control-group">
+                        <div class="sim-header-row">
+                            <label>Swing Rotation:</label>
+                            <span class="sim-val-display" id="valRot-{{ section.id }}">0°</span>
+                        </div>
+                        <input type="range" id="timeSlider-{{ section.id }}" class="sim-range" min="0" max="1000" value="0">
                     </div>
-                    <input type="range" id="timeSlider-{{ section.id }}" class="sim-range" min="0" max="1000" value="0">
-                </div>
 
-                <div class="sim-control-group">
-                    <div class="sim-header-row">
-                        <label style="display:flex; align-items:center; gap: 10px;">
-                            Shot Speed:
-                            <button type="button" class="sim-unit-btn" id="unitToggle-{{ section.id }}">KM/H</button>
-                        </label>
-                        <span class="sim-val-display" id="valSpeed-{{ section.id }}">100 km/h</span>
+                    <div class="sim-control-group">
+                        <div class="sim-header-row">
+                            <label style="display:flex; align-items:center; gap: 10px;">
+                                Shot Speed:
+                                <button type="button" class="sim-unit-btn" id="unitToggle-{{ section.id }}">KM/H</button>
+                            </label>
+                            <span class="sim-val-display" id="valSpeed-{{ section.id }}">100 km/h</span>
+                        </div>
+                        <span class="sim-speed-category" id="speedCat-{{ section.id }}">Gevorderd</span>
+                        <input type="range" id="speedSlider-{{ section.id }}" class="sim-range" min="20" max="200" value="100">
                     </div>
-                    <span class="sim-speed-category" id="speedCat-{{ section.id }}">Gevorderd</span>
-                    <input type="range" id="speedSlider-{{ section.id }}" class="sim-range" min="20" max="200" value="100">
-                </div>
 
-                <div class="sim-toggles" style="display: none;">
-                    <label class="sim-checkbox-label">
-                        <input type="checkbox" id="cbKp2-{{ section.id }}"> + Extra Kickpoint 2
-                    </label>
-                    <label class="sim-checkbox-label">
-                        <input type="checkbox" id="cbKp3-{{ section.id }}"> + Extra Kickpoint 3
-                    </label>
+                    <div class="sim-instructions">
+                        Sleep de bolletjes op het canvas omhoog/omlaag voor kickpoints.<br>Sleep links/rechts over het canvas voor de Flex (stijfheid).
+                    </div>
                 </div>
-                <div class="sim-instructions">
-                    Sleep de bolletjes op het canvas omhoog/omlaag voor kickpoints.<br>Sleep links/rechts over het canvas voor de Flex (stijfheid).
-                </div>
-            </div>
+              </div>
+              <div class="sim-modal-footer">
+                  <button type="button" id="apply-sim-modal-{{ section.id }}" class="configurator-submit-btn" style="width: 100%;">Toepassen</button>
+              </div>
           </div>
         </div>
 
@@ -374,6 +383,16 @@
   @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
   /* Simulator Styles */
+  /* Simulator Modal Styles */
+  .hockey-stick-configurator .sim-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.8); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+  .hockey-stick-configurator .sim-modal-content { background-color: #1a1a1a; border-radius: 8px; width: 100%; max-width: 600px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
+  .hockey-stick-configurator .sim-modal-header { padding: 15px 20px; background-color: #222; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; color: #fff; }
+  .hockey-stick-configurator .sim-modal-header h3 { margin: 0; font-size: 1.25rem; color: #fff; }
+  .hockey-stick-configurator .sim-modal-close { background: none; border: none; color: #ccc; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1; transition: color 0.2s; }
+  .hockey-stick-configurator .sim-modal-close:hover { color: #fff; }
+  .hockey-stick-configurator .sim-modal-footer { padding: 15px 20px; background-color: #222; border-top: 1px solid #333; }
+  .hockey-stick-configurator .simulator-wrapper { flex: 1; overflow-y: auto !important; }
+
   .hockey-stick-configurator .sim-canvas-container { width: 100%; display: flex; justify-content: center; align-items: center; position: relative; background-color: #121212; }
   .hockey-stick-configurator .sim-canvas-container canvas { background-color: #1a1a1a; box-shadow: 0 4px 15px rgba(0,0,0,0.8); border-bottom: 1px solid #333; max-width: 100%; max-height: 100%; touch-action: none; }
   .hockey-stick-configurator .sim-controls { width: 100%; background-color: #222; padding: 15px 20px; box-sizing: border-box; border-top: 2px solid #444; display: flex; flex-direction: column; gap: 15px; color: #fff; }
@@ -1113,7 +1132,13 @@
     // Flex & Kickpoint 2D Simulator Logic
     // ==========================================
     const simCanvas = document.getElementById(`simCanvas-${sectionId}`);
-    if (simCanvas) {
+    const simModal = document.getElementById(`sim-modal-${sectionId}`);
+    const openSimBtn = document.getElementById(`open-sim-modal-${sectionId}`);
+    const closeSimBtn = document.getElementById(`close-sim-modal-${sectionId}`);
+    const applySimBtn = document.getElementById(`apply-sim-modal-${sectionId}`);
+    const simSummary = document.getElementById(`sim-summary-${sectionId}`);
+
+    if (simCanvas && simModal && openSimBtn) {
         const ctx = simCanvas.getContext('2d');
         const tooltip = document.getElementById(`dragTooltip-${sectionId}`);
         const timeSlider = document.getElementById(`timeSlider-${sectionId}`);
@@ -1177,13 +1202,20 @@
 
         function precalculatePhysics() {
             precalculatedTips = [];
-            let previousTipAngle = 240;
+            let previousTipAngle = 135;
             let speed = parseFloat(speedSlider.value);
 
             for(let i=0; i<=1000; i++) {
                 let t = i / 1000;
-                let baseAngle = 240 - (t * 240);
-                let rawBend = getRawBend(t, speed, flex);
+                // Swing range mapped to 135deg (07:30) to 0deg (03:00)
+                let baseAngle = 135 - (t * 135);
+
+                // Map the new t back to the original t used for physics
+                // (Original swing was 240 to 0. So 135 degrees is when old_t was roughly (240-135)/240 = 0.4375)
+                // We compress the remaining 0.5625 of the original animation into the new 1.0 of this animation.
+                let old_t = 0.4375 + (t * (1 - 0.4375));
+
+                let rawBend = getRawBend(old_t, speed, flex);
                 let actualTip = baseAngle + rawBend;
                 if (actualTip > previousTipAngle) actualTip = previousTipAngle;
                 previousTipAngle = actualTip;
@@ -1196,7 +1228,7 @@
             let t = parseInt(timeSlider.value) / 1000;
             let speed = parseFloat(speedSlider.value);
 
-            valRot.innerText = Math.round(t * 240) + "°";
+            valRot.innerText = Math.round(t * 135) + "°";
             if(useMph) {
                 valSpeed.innerText = Math.round(speed * 0.621371) + " mph";
             } else {
@@ -1207,7 +1239,7 @@
         }
 
         function drawStick(t, speed) {
-            const baseAngleDeg = 240 - (t * 240);
+            const baseAngleDeg = 135 - (t * 135);
             const totalBend = precalculatedTips[parseInt(timeSlider.value)] || 0;
             const isBroken = Math.abs(totalBend) > 40;
 
@@ -1310,7 +1342,7 @@
         function handlePointerDown(e) {
             const pos = getPointerPos(e);
             let t = parseInt(timeSlider.value) / 1000;
-            let baseAngleDeg = 240 - (t * 240);
+            let baseAngleDeg = 135 - (t * 135);
 
             let px = CENTER_X + (kp1 * ROD_LENGTH) * Math.cos(deg2rad(baseAngleDeg));
             let py = CENTER_Y + (kp1 * ROD_LENGTH) * Math.sin(deg2rad(baseAngleDeg));
@@ -1326,7 +1358,7 @@
             e.preventDefault();
             const pos = getPointerPos(e);
             let t = parseInt(timeSlider.value) / 1000;
-            let baseAngleDeg = 240 - (t * 240);
+            let baseAngleDeg = 135 - (t * 135);
 
             let vX = Math.cos(deg2rad(baseAngleDeg));
             let vY = Math.sin(deg2rad(baseAngleDeg));
@@ -1363,6 +1395,10 @@
             if(kpName.includes("High")) kpCode = "HK";
             nonVisualData["Kick-point"] = { label: kpName, code: kpCode, price: 0 };
 
+            if(simSummary) {
+                simSummary.textContent = `${finalFlex} Flex, ${kpName}`;
+            }
+
             updateHiddenDynamicInputs();
             updateConfigurator();
         }
@@ -1371,8 +1407,26 @@
             if (dragging) {
                 dragging = null;
                 tooltip.style.display = 'none';
-                syncSimToConfigurator(); // Sync to main app on drop
+                // No longer syncing on drop, only when applied
             }
+        }
+
+        // Modal open/close logic
+        openSimBtn.addEventListener('click', () => {
+            simModal.style.display = 'flex';
+        });
+
+        if(closeSimBtn) {
+            closeSimBtn.addEventListener('click', () => {
+                simModal.style.display = 'none';
+            });
+        }
+
+        if(applySimBtn) {
+            applySimBtn.addEventListener('click', () => {
+                syncSimToConfigurator();
+                simModal.style.display = 'none';
+            });
         }
 
         // Attach sim events
