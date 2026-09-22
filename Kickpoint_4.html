@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hockey Stick Flex Simulatie</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none; /* Voorkomt pull-to-refresh op mobiel */
+        }
+        
+        #canvas-container {
+            width: 100%;
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        canvas {
+            background-color: #1a1a1a;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.8);
+            border-bottom: 1px solid #333;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        /* Controls onderaan, touch-friendly */
+        #controls {
+            width: 100%;
+            background-color: #222;
+            padding: 15px 20px 25px 20px;
+            box-sizing: border-box;
+            border-top: 2px solid #444;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-height: 45vh;
+            overflow-y: auto;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        label { font-weight: bold; font-size: 14px; color: #ddd; }
+        .val-display { color: #00d2ff; font-weight: bold; font-family: monospace; font-size: 16px;}
+        
+        .speed-category {
+            font-size: 12px;
+            color: #aaa;
+            font-style: italic;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 12px;
+            border-radius: 6px;
+            background: #444;
+            outline: none;
+            margin: 10px 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #00d2ff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
+        }
+
+        .toggles {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            font-size: 14px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            background: #333;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        button.info-btn {
+            background-color: #00d2ff;
+            color: #000;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        button.unit-btn {
+            background-color: #444;
+            color: #fff;
+            border: 1px solid #666;
+            border-radius: 4px;
+            padding: 2px 6px;
+            cursor: pointer;
+            font-size: 11px;
+            margin-left: 10px;
+        }
+
+        /* Modal styling */
+        #infoModal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .modal-content {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 600px;
+            width: 100%;
+            color: #fff;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-content h3 { margin-top: 0; color: #00d2ff; }
+        .modal-close {
+            background: #ff4444; color: #fff; border: none;
+            padding: 8px 16px; border-radius: 4px; cursor: pointer;
+            float: right; font-weight: bold;
+        }
+        table {
+            width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px;
+        }
+        th, td {
+            padding: 8px; border: 1px solid #444; text-align: left;
+        }
+        th { background: #333; color: #00d2ff; }
+
+        /* Tooltip voor drag */
+        #dragTooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            display: none;
+            white-space: nowrap;
+            z-index: 100;
+            border: 1px solid #00d2ff;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <canvas id="simCanvas" width="600" height="500"></canvas>
+        <div id="dragTooltip">Tooltip</div>
+    </div>
+
+    <div id="controls">
+        <div class="control-group">
+            <div class="header-row">
+                <label>Swing Rotation:</label>
+                <span class="val-display" id="valRot">0°</span>
+            </div>
+            <input type="range" id="timeSlider" min="0" max="1000" value="0">
+        </div>
+
+        <div class="control-group">
+            <div class="header-row">
+                <label style="display:flex; align-items:center; gap: 10px;">
+                    Shot Speed: 
+                    <button class="info-btn" onclick="document.getElementById('infoModal').style.display='flex'">ℹ Info</button>
+                    <button class="unit-btn" id="unitToggle">KM/H</button>
+                </label>
+                <span class="val-display" id="valSpeed">100 km/h</span>
+            </div>
+            <span class="speed-category" id="speedCat">Gevorderd</span>
+            <input type="range" id="speedSlider" min="20" max="200" value="100">
+        </div>
+
+        <div class="toggles">
+            <label class="checkbox-label">
+                <input type="checkbox" id="cbKp2"> + Extra Kickpoint 2
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="cbKp3"> + Extra Kickpoint 3
+            </label>
+        </div>
+        <div style="font-size: 11px; color: #888; text-align: center;">
+            Sleep de bolletjes op het canvas omhoog/omlaag voor kickpoints. <br>Sleep links/rechts voor de Flex (stijfheid).
+        </div>
+    </div>
+
+    <div id="infoModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="document.getElementById('infoModal').style.display='none'">Sluiten</button>
+            <h3>Shot Speed Records (Historie)</h3>
+            <table>
+                <tr>
+                    <th>Competitie / Status</th>
+                    <th>Snelheid</th>
+                    <th>Recordhouder</th>
+                    <th>Stick Model</th>
+                    <th>Flex & Kickpoint</th>
+                </tr>
+                <tr>
+                    <td>KHL (Onofficieel)</td>
+                    <td>183,7 km/h (114,1 mph)</td>
+                    <td>Alexander Riazantsev (2012)</td>
+                    <td>Bauer Supreme TotalOne</td>
+                    <td>102-112 (Amplified Mid)</td>
+                </tr>
+                <tr>
+                    <td>KHL (Guinness Record)</td>
+                    <td>177,5 km/h (110,3 mph)</td>
+                    <td>Denis Koelyasj (2011)</td>
+                    <td>Bauer Supreme TotalOne</td>
+                    <td>110 (Amplified Mid)</td>
+                </tr>
+                <tr>
+                    <td>AHL (Noord-Amerika)</td>
+                    <td>175,7 km/h (109,2 mph)</td>
+                    <td>Martin Frk (2020)</td>
+                    <td>CCM Super Tacks AS2 Pro</td>
+                    <td>70 (Mid-Kick)</td>
+                </tr>
+                <tr>
+                    <td>NHL (Officieel)</td>
+                    <td>175,1 km/h (108,8 mph)</td>
+                    <td>Zdeno Chára (2012)</td>
+                    <td>Warrior Dynasty</td>
+                    <td>150-160 (High-Kick)</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('dragTooltip');
+        
+        // UI Elements
+        const timeSlider = document.getElementById('timeSlider');
+        const speedSlider = document.getElementById('speedSlider');
+        const unitToggle = document.getElementById('unitToggle');
+        const cbKp2 = document.getElementById('cbKp2');
+        const cbKp3 = document.getElementById('cbKp3');
+        const valRot = document.getElementById('valRot');
+        const valSpeed = document.getElementById('valSpeed');
+        const speedCat = document.getElementById('speedCat');
+
+        // Configuratie
+        const ROD_LENGTH = 300;
+        const CENTER_X = canvas.width / 2;
+        const CENTER_Y = 150; // Verschuiving zodat de top 25% "buiten beeld" valt
+        const SEGMENTS = 50; 
+        const SHOW_CLOCK = false; // Klok is verborgen
+
+        // State
+        let kp1 = 0.5; // Handschoen
+        let kp2 = 0.7;
+        let kp3 = 0.85;
+        let flex = 75; // 20 tot 125
+        let useMph = false;
+        let dragging = null;
+
+        // Voor monotonic check (geen tijdreizen)
+        let precalculatedTips = [];
+        
+        const deg2rad = deg => deg * Math.PI / 180;
+
+        function getSpeedCategory(speed) {
+            if(speed < 65) return "Beginner";
+            if(speed < 95) return "Gemiddeld";
+            if(speed < 130) return "Gevorderd";
+            if(speed < 160) return "Pro";
+            if(speed < 185) return "Elite";
+            return "Hardste schot ooit";
+        }
+
+        function getKpName(index, val) {
+            if(index === 1) return "Handschoenpositie";
+            let v = val * 100;
+            if(v >= 80) return "Ultra-Low Kickpoint";
+            if(v >= 65) return "Low Kickpoint";
+            if(v >= 55) return "Mid-Low Kickpoint";
+            if(v >= 40) return "Mid Kickpoint";
+            if(v >= 30) return "Amplified Mid Kickpoint";
+            return "High Kickpoint";
+        }
+
+        // Berekent pure wiskundige buiging
+        function getRawBend(t, speed, currentFlex) {
+            let flexFactor = 125 / currentFlex;
+            
+            // BASIS BUIGWEERSTAND: De berekende maximale buiging wordt gedeeld door 1.20
+            let baseMaxLag = (speed / 200) * 60 * flexFactor; 
+            let maxLag = baseMaxLag / 1.20; 
+            
+            let maxWhip = -(maxLag * 0.15); // Whip is drastisch gereduceerd ten opzichte van eerder
+            
+            if (t < 0.5625) { // 11:00 tot 06:30 is recht
+                return 0;
+            } else if (t >= 0.5625 && t < 0.625) { // Lag opbouw tot 06:00
+                let u = (t - 0.5625) / (0.625 - 0.5625);
+                return maxLag * 0.5 * (1 - Math.cos(u * Math.PI));
+            } else if (t >= 0.625 && t < 0.85) { // Whip fase
+                let v = (t - 0.625) / (0.85 - 0.625);
+                return maxWhip + (maxLag - maxWhip) * 0.5 * (1 + Math.cos(v * Math.PI));
+            } else { // Demping
+                let w = (t - 0.85) / 0.15;
+                return maxWhip * 0.5 * (1 + Math.cos(w * Math.PI));
+            }
+        }
+
+        // Voorkomt tijdreizen: zorgt dat de daadwerkelijke hoek altijd daalt
+        function precalculatePhysics() {
+            precalculatedTips = [];
+            let previousTipAngle = 240; 
+            let speed = parseFloat(speedSlider.value);
+            
+            for(let i=0; i<=1000; i++) {
+                let t = i / 1000;
+                let baseAngle = 240 - (t * 240);
+                let rawBend = getRawBend(t, speed, flex);
+                
+                let actualTip = baseAngle + rawBend;
+                
+                // Forceer monotoniciteit: uiteinde mag NOOIT terug bewegen in de draairichting
+                if (actualTip > previousTipAngle) {
+                    actualTip = previousTipAngle; // Bevries de stick in de lucht tot de base weer inhaalt!
+                }
+                
+                previousTipAngle = actualTip;
+                // Sla de geforceerde buiging op
+                precalculatedTips.push(actualTip - baseAngle);
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let t = parseInt(timeSlider.value) / 1000;
+            let speed = parseFloat(speedSlider.value);
+            
+            // Update UI teksten
+            valRot.innerText = Math.round(t * 240) + "°";
+            if(useMph) {
+                valSpeed.innerText = Math.round(speed * 0.621371) + " mph";
+            } else {
+                valSpeed.innerText = speed + " km/h";
+            }
+            speedCat.innerText = getSpeedCategory(speed);
+
+            if(SHOW_CLOCK) drawClockFace();
+            drawStick(t, speed);
+        }
+
+        function drawStick(t, speed) {
+            const baseAngleDeg = 240 - (t * 240);
+            
+            // Haal de geforceerde (fysiek correcte) buiging op uit de precalc
+            const totalBend = precalculatedTips[parseInt(timeSlider.value)] || 0;
+            
+            // Breek conditie: verhoogd naar > 40 graden
+            const isBroken = Math.abs(totalBend) > 40;
+
+            // Ghost Line (Ongebogen referentie)
+            ctx.beginPath();
+            ctx.moveTo(CENTER_X, CENTER_Y);
+            const tipX = CENTER_X + ROD_LENGTH * Math.cos(deg2rad(baseAngleDeg));
+            const tipY = CENTER_Y + ROD_LENGTH * Math.sin(deg2rad(baseAngleDeg));
+            ctx.lineTo(tipX, tipY);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Teken de fysieke hengel met kleur-gradient per segment
+            let currentAngle = baseAngleDeg;
+            let curX = CENTER_X;
+            let curY = CENTER_Y;
+            let segLen = ROD_LENGTH / SEGMENTS;
+
+            // Bepaal de gewichten op basis van kickpoints
+            let weights = [];
+            let weightSum = 0;
+            const sigma = 0.12; 
+
+            for (let i = 0; i < SEGMENTS; i++) {
+                let pos = i / (SEGMENTS - 1);
+                let w = Math.exp(-Math.pow(pos - kp1, 2) / (2 * sigma * sigma));
+                if (cbKp2.checked) w += Math.exp(-Math.pow(pos - kp2, 2) / (2 * sigma * sigma));
+                if (cbKp3.checked) w += Math.exp(-Math.pow(pos - kp3, 2) / (2 * sigma * sigma));
+                
+                weights.push(w);
+                weightSum += w;
+            }
+
+            // Teken de segmenten
+            let breakOccurred = false;
+            
+            for (let i = 0; i < SEGMENTS; i++) {
+                let wNorm = weights[i] / weightSum;
+                let localBend = (wNorm * totalBend);
+                currentAngle += localBend; 
+
+                let nextX = curX + segLen * Math.cos(deg2rad(currentAngle));
+                let nextY = curY + segLen * Math.sin(deg2rad(currentAngle));
+                
+                // Als gebroken, stop met tekenen vanaf ruwweg het sterkste buigpunt
+                if (isBroken && i > SEGMENTS * kp1) {
+                    breakOccurred = true;
+                    // Teken het afgebroken deel dat wegschiet
+                    ctx.beginPath();
+                    ctx.moveTo(curX + 20, curY + 20); // offset
+                    let brokenEndX = curX + 20 + (ROD_LENGTH - (i*segLen)) * Math.cos(deg2rad(currentAngle - 40));
+                    let brokenEndY = curY + 20 + (ROD_LENGTH - (i*segLen)) * Math.sin(deg2rad(currentAngle - 40));
+                    ctx.lineTo(brokenEndX, brokenEndY);
+                    ctx.strokeStyle = '#ff0000';
+                    ctx.lineWidth = 6;
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = "#ff0000";
+                    ctx.font = "bold 24px Arial";
+                    ctx.fillText("GEBROKEN!", curX + 30, curY);
+                    break;
+                }
+
+                // Heatmap Kleur berekenen: Groen (120) -> Rood (0) op basis van buiging
+                // 40 graden (nieuwe breuklimiet) = max rood
+                let intensity = Math.min(1, Math.abs(totalBend) / 40); 
+                let localIntensity = Math.min(1, Math.abs(localBend * SEGMENTS / 20)); // Versterk visueel
+                let finalIntensity = Math.max(intensity * 0.5, localIntensity);
+                let hue = 120 - (finalIntensity * 120);
+                
+                ctx.beginPath();
+                ctx.moveTo(curX, curY);
+                ctx.lineTo(nextX, nextY);
+                ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+                ctx.lineWidth = 6;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                curX = nextX;
+                curY = nextY;
+            }
+
+            // Clamp / Scharnier
+            ctx.beginPath();
+            ctx.arc(CENTER_X, CENTER_Y, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+
+            // Teken de Draggable Kickpoints op de GHOST LINE
+            drawKpNode(kp1, baseAngleDeg, '#00d2ff', dragging === 'kp1');
+            if (cbKp2.checked) drawKpNode(kp2, baseAngleDeg, '#ff00d2', dragging === 'kp2');
+            if (cbKp3.checked) drawKpNode(kp3, baseAngleDeg, '#ffff00', dragging === 'kp3');
+        }
+
+        function drawKpNode(kpVal, angleDeg, color, isDragging) {
+            let px = CENTER_X + (kpVal * ROD_LENGTH) * Math.cos(deg2rad(angleDeg));
+            let py = CENTER_Y + (kpVal * ROD_LENGTH) * Math.sin(deg2rad(angleDeg));
+            
+            ctx.beginPath();
+            ctx.arc(px, py, isDragging ? 14 : 10, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function drawClockFace() {
+            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const r = ROD_LENGTH + 30;
+            const labels = [
+                { time: '11:00', deg: 240 },
+                { time: '09:00', deg: 180 },
+                { time: '06:30', deg: 105 },
+                { time: '06:00', deg: 90 },
+                { time: '03:00', deg: 0 }
+            ];
+
+            labels.forEach(l => {
+                let lx = CENTER_X + r * Math.cos(deg2rad(l.deg));
+                let ly = CENTER_Y + r * Math.sin(deg2rad(l.deg));
+                ctx.fillText(l.time, lx, ly);
+            });
+        }
+
+        // Interactie Logica (Touch & Mouse unified)
+        function getPointerPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            // Ondersteuning voor touch en muis
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        function handlePointerDown(e) {
+            const pos = getPointerPos(e);
+            let t = parseInt(timeSlider.value) / 1000;
+            let baseAngleDeg = 240 - (t * 240);
+            
+            const checkKp = (kpVal, id) => {
+                let px = CENTER_X + (kpVal * ROD_LENGTH) * Math.cos(deg2rad(baseAngleDeg));
+                let py = CENTER_Y + (kpVal * ROD_LENGTH) * Math.sin(deg2rad(baseAngleDeg));
+                if (Math.hypot(pos.x - px, pos.y - py) < 25) return id; // Brede touch target
+                return null;
+            };
+
+            dragging = checkKp(kp1, 'kp1') || 
+                      (cbKp2.checked ? checkKp(kp2, 'kp2') : null) || 
+                      (cbKp3.checked ? checkKp(kp3, 'kp3') : null);
+
+            if (dragging) {
+                e.preventDefault();
+                tooltip.style.display = 'block';
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!dragging) return;
+            e.preventDefault();
+            const pos = getPointerPos(e);
+            let t = parseInt(timeSlider.value) / 1000;
+            let baseAngleDeg = 240 - (t * 240);
+            
+            // 2D Vector Projectie om beweging langs de schuine lijn te berekenen
+            let vX = Math.cos(deg2rad(baseAngleDeg));
+            let vY = Math.sin(deg2rad(baseAngleDeg));
+            
+            let dX = pos.x - CENTER_X;
+            let dY = pos.y - CENTER_Y;
+            
+            let dotProduct = (dX * vX + dY * vY); // Positie langs de lijn
+            let newKp = Math.max(0.05, Math.min(0.95, dotProduct / ROD_LENGTH));
+
+            // Horizontale muisbeweging past de Flex (stijfheid) aan
+            let horizontalPercent = Math.max(0, Math.min(1, pos.x / canvas.width));
+            flex = 125 - (horizontalPercent * 105); // 125 (stijf) rechts, 20 (slap) links
+
+            let idNum = 1;
+            if (dragging === 'kp1') { kp1 = newKp; idNum = 1; }
+            if (dragging === 'kp2') { kp2 = newKp; idNum = 2; }
+            if (dragging === 'kp3') { kp3 = newKp; idNum = 3; }
+            
+            // Update Tooltip
+            const rect = canvas.getBoundingClientRect();
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            tooltip.style.left = (clientX + 15) + 'px';
+            tooltip.style.top = (clientY - 30) + 'px';
+            tooltip.innerHTML = `${getKpName(idNum, newKp)}<br>Flex: ${Math.round(flex)}`;
+            
+            precalculatePhysics();
+            draw();
+        }
+
+        function handlePointerUp() {
+            dragging = null;
+            tooltip.style.display = 'none';
+        }
+
+        // Event Listeners bind
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+
+        canvas.addEventListener('touchstart', handlePointerDown, {passive: false});
+        canvas.addEventListener('touchmove', handlePointerMove, {passive: false});
+        window.addEventListener('touchend', handlePointerUp);
+
+        timeSlider.addEventListener('input', draw);
+        speedSlider.addEventListener('input', () => {
+            precalculatePhysics();
+            draw();
+        });
+        
+        cbKp2.addEventListener('change', draw);
+        cbKp3.addEventListener('change', draw);
+
+        unitToggle.addEventListener('click', () => {
+            useMph = !useMph;
+            unitToggle.innerText = useMph ? "MPH" : "KM/H";
+            draw();
+        });
+
+        // Initialize
+        precalculatePhysics();
+        draw();
+
+    </script>
+</body>
+</html>

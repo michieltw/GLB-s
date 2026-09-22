@@ -160,6 +160,51 @@
           {% endif %}
         {% endfor %}
 
+        <!-- Flex & Kickpoint 2D Simulator -->
+        <div class="option-group" style="margin-top: 2rem;">
+          <label>Interactieve Flex & Kickpoint Simulator:</label>
+          <div class="simulator-wrapper" style="border: 1px solid #ccc; border-radius: 8px; overflow: hidden; background: #1a1a1a;">
+            <div id="canvas-container-{{ section.id }}" class="sim-canvas-container">
+                <canvas id="simCanvas-{{ section.id }}" width="600" height="400"></canvas>
+                <div id="dragTooltip-{{ section.id }}" class="sim-tooltip">Tooltip</div>
+            </div>
+
+            <div id="controls-{{ section.id }}" class="sim-controls">
+                <div class="sim-control-group">
+                    <div class="sim-header-row">
+                        <label>Swing Rotation:</label>
+                        <span class="sim-val-display" id="valRot-{{ section.id }}">0°</span>
+                    </div>
+                    <input type="range" id="timeSlider-{{ section.id }}" class="sim-range" min="0" max="1000" value="0">
+                </div>
+
+                <div class="sim-control-group">
+                    <div class="sim-header-row">
+                        <label style="display:flex; align-items:center; gap: 10px;">
+                            Shot Speed:
+                            <button type="button" class="sim-unit-btn" id="unitToggle-{{ section.id }}">KM/H</button>
+                        </label>
+                        <span class="sim-val-display" id="valSpeed-{{ section.id }}">100 km/h</span>
+                    </div>
+                    <span class="sim-speed-category" id="speedCat-{{ section.id }}">Gevorderd</span>
+                    <input type="range" id="speedSlider-{{ section.id }}" class="sim-range" min="20" max="200" value="100">
+                </div>
+
+                <div class="sim-toggles" style="display: none;">
+                    <label class="sim-checkbox-label">
+                        <input type="checkbox" id="cbKp2-{{ section.id }}"> + Extra Kickpoint 2
+                    </label>
+                    <label class="sim-checkbox-label">
+                        <input type="checkbox" id="cbKp3-{{ section.id }}"> + Extra Kickpoint 3
+                    </label>
+                </div>
+                <div class="sim-instructions">
+                    Sleep de bolletjes op het canvas omhoog/omlaag voor kickpoints.<br>Sleep links/rechts over het canvas voor de Flex (stijfheid).
+                </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Niet-visuele specificaties (Flex, Kick-point, etc.) -->
         {% for block in section.blocks %}
           {% if block.type == 'text_option' %}
@@ -327,6 +372,21 @@
   .btn-small { padding: 0.5rem 1rem; font-size: 0.9rem; }
 
   @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Simulator Styles */
+  .hockey-stick-configurator .sim-canvas-container { width: 100%; display: flex; justify-content: center; align-items: center; position: relative; background-color: #121212; }
+  .hockey-stick-configurator .sim-canvas-container canvas { background-color: #1a1a1a; box-shadow: 0 4px 15px rgba(0,0,0,0.8); border-bottom: 1px solid #333; max-width: 100%; max-height: 100%; touch-action: none; }
+  .hockey-stick-configurator .sim-controls { width: 100%; background-color: #222; padding: 15px 20px; box-sizing: border-box; border-top: 2px solid #444; display: flex; flex-direction: column; gap: 15px; color: #fff; }
+  .hockey-stick-configurator .sim-control-group { display: flex; flex-direction: column; gap: 5px; }
+  .hockey-stick-configurator .sim-header-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .hockey-stick-configurator .sim-controls label { font-weight: bold; font-size: 14px; color: #ddd; margin: 0; }
+  .hockey-stick-configurator .sim-val-display { color: #00d2ff; font-weight: bold; font-family: monospace; font-size: 16px; }
+  .hockey-stick-configurator .sim-speed-category { font-size: 12px; color: #aaa; font-style: italic; }
+  .hockey-stick-configurator .sim-range { -webkit-appearance: none; width: 100%; height: 12px; border-radius: 6px; background: #444; outline: none; margin: 10px 0; }
+  .hockey-stick-configurator .sim-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #00d2ff; cursor: pointer; box-shadow: 0 0 10px rgba(0, 210, 255, 0.5); }
+  .hockey-stick-configurator .sim-unit-btn { background-color: #444; color: #fff; border: 1px solid #666; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 11px; margin-left: 10px; }
+  .hockey-stick-configurator .sim-tooltip { position: absolute; background: rgba(0,0,0,0.8); color: #fff; padding: 5px 10px; border-radius: 4px; font-size: 12px; pointer-events: none; display: none; white-space: nowrap; z-index: 100; border: 1px solid #00d2ff; }
+  .hockey-stick-configurator .sim-instructions { font-size: 12px; color: #888; text-align: center; margin-top: 10px; line-height: 1.4; }
 </style>
 
 <script>
@@ -1048,6 +1108,301 @@
 
     // Init dynamische form UI
     buildDynamicUI();
+
+    // ==========================================
+    // Flex & Kickpoint 2D Simulator Logic
+    // ==========================================
+    const simCanvas = document.getElementById(`simCanvas-${sectionId}`);
+    if (simCanvas) {
+        const ctx = simCanvas.getContext('2d');
+        const tooltip = document.getElementById(`dragTooltip-${sectionId}`);
+        const timeSlider = document.getElementById(`timeSlider-${sectionId}`);
+        const speedSlider = document.getElementById(`speedSlider-${sectionId}`);
+        const unitToggle = document.getElementById(`unitToggle-${sectionId}`);
+        const valRot = document.getElementById(`valRot-${sectionId}`);
+        const valSpeed = document.getElementById(`valSpeed-${sectionId}`);
+        const speedCat = document.getElementById(`speedCat-${sectionId}`);
+
+        // Configuration
+        const ROD_LENGTH = 200; // Scaled down for 600x400 canvas
+        const CENTER_X = simCanvas.width / 2;
+        const CENTER_Y = 100;
+        const SEGMENTS = 50;
+
+        // State
+        let kp1 = 0.5;
+        let flex = 75;
+        let useMph = false;
+        let dragging = null;
+        let precalculatedTips = [];
+        const deg2rad = deg => deg * Math.PI / 180;
+
+        function getSpeedCategory(speed) {
+            if(speed < 65) return "Beginner";
+            if(speed < 95) return "Gemiddeld";
+            if(speed < 130) return "Gevorderd";
+            if(speed < 160) return "Pro";
+            if(speed < 185) return "Elite";
+            return "Hardste schot ooit";
+        }
+
+        function getKpName(index, val) {
+            let v = val * 100;
+            if(v >= 80) return "Ultra-Low Kickpoint";
+            if(v >= 65) return "Low Kickpoint";
+            if(v >= 55) return "Mid-Low Kickpoint";
+            if(v >= 40) return "Mid Kickpoint";
+            if(v >= 30) return "Amplified Mid Kickpoint";
+            return "High Kickpoint";
+        }
+
+        function getRawBend(t, speed, currentFlex) {
+            let flexFactor = 125 / currentFlex;
+            let baseMaxLag = (speed / 200) * 60 * flexFactor;
+            let maxLag = baseMaxLag / 1.20;
+            let maxWhip = -(maxLag * 0.15);
+
+            if (t < 0.5625) return 0;
+            else if (t >= 0.5625 && t < 0.625) {
+                let u = (t - 0.5625) / (0.625 - 0.5625);
+                return maxLag * 0.5 * (1 - Math.cos(u * Math.PI));
+            } else if (t >= 0.625 && t < 0.85) {
+                let v = (t - 0.625) / (0.85 - 0.625);
+                return maxWhip + (maxLag - maxWhip) * 0.5 * (1 + Math.cos(v * Math.PI));
+            } else {
+                let w = (t - 0.85) / 0.15;
+                return maxWhip * 0.5 * (1 + Math.cos(w * Math.PI));
+            }
+        }
+
+        function precalculatePhysics() {
+            precalculatedTips = [];
+            let previousTipAngle = 240;
+            let speed = parseFloat(speedSlider.value);
+
+            for(let i=0; i<=1000; i++) {
+                let t = i / 1000;
+                let baseAngle = 240 - (t * 240);
+                let rawBend = getRawBend(t, speed, flex);
+                let actualTip = baseAngle + rawBend;
+                if (actualTip > previousTipAngle) actualTip = previousTipAngle;
+                previousTipAngle = actualTip;
+                precalculatedTips.push(actualTip - baseAngle);
+            }
+        }
+
+        function drawSim() {
+            ctx.clearRect(0, 0, simCanvas.width, simCanvas.height);
+            let t = parseInt(timeSlider.value) / 1000;
+            let speed = parseFloat(speedSlider.value);
+
+            valRot.innerText = Math.round(t * 240) + "°";
+            if(useMph) {
+                valSpeed.innerText = Math.round(speed * 0.621371) + " mph";
+            } else {
+                valSpeed.innerText = speed + " km/h";
+            }
+            speedCat.innerText = getSpeedCategory(speed);
+            drawStick(t, speed);
+        }
+
+        function drawStick(t, speed) {
+            const baseAngleDeg = 240 - (t * 240);
+            const totalBend = precalculatedTips[parseInt(timeSlider.value)] || 0;
+            const isBroken = Math.abs(totalBend) > 40;
+
+            // Ghost Line
+            ctx.beginPath();
+            ctx.moveTo(CENTER_X, CENTER_Y);
+            const tipX = CENTER_X + ROD_LENGTH * Math.cos(deg2rad(baseAngleDeg));
+            const tipY = CENTER_Y + ROD_LENGTH * Math.sin(deg2rad(baseAngleDeg));
+            ctx.lineTo(tipX, tipY);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            let currentAngle = baseAngleDeg;
+            let curX = CENTER_X;
+            let curY = CENTER_Y;
+            let segLen = ROD_LENGTH / SEGMENTS;
+
+            let weights = [];
+            let weightSum = 0;
+            const sigma = 0.12;
+
+            for (let i = 0; i < SEGMENTS; i++) {
+                let pos = i / (SEGMENTS - 1);
+                let w = Math.exp(-Math.pow(pos - kp1, 2) / (2 * sigma * sigma));
+                weights.push(w);
+                weightSum += w;
+            }
+
+            for (let i = 0; i < SEGMENTS; i++) {
+                let wNorm = weights[i] / weightSum;
+                let localBend = (wNorm * totalBend);
+                currentAngle += localBend;
+
+                let nextX = curX + segLen * Math.cos(deg2rad(currentAngle));
+                let nextY = curY + segLen * Math.sin(deg2rad(currentAngle));
+
+                if (isBroken && i > SEGMENTS * kp1) {
+                    ctx.beginPath();
+                    ctx.moveTo(curX + 20, curY + 20);
+                    let brokenEndX = curX + 20 + (ROD_LENGTH - (i*segLen)) * Math.cos(deg2rad(currentAngle - 40));
+                    let brokenEndY = curY + 20 + (ROD_LENGTH - (i*segLen)) * Math.sin(deg2rad(currentAngle - 40));
+                    ctx.lineTo(brokenEndX, brokenEndY);
+                    ctx.strokeStyle = '#ff0000';
+                    ctx.lineWidth = 6;
+                    ctx.stroke();
+                    ctx.fillStyle = "#ff0000";
+                    ctx.font = "bold 24px Arial";
+                    ctx.fillText("GEBROKEN!", curX + 30, curY);
+                    break;
+                }
+
+                let intensity = Math.min(1, Math.abs(totalBend) / 40);
+                let localIntensity = Math.min(1, Math.abs(localBend * SEGMENTS / 20));
+                let finalIntensity = Math.max(intensity * 0.5, localIntensity);
+                let hue = 120 - (finalIntensity * 120);
+
+                ctx.beginPath();
+                ctx.moveTo(curX, curY);
+                ctx.lineTo(nextX, nextY);
+                ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+                ctx.lineWidth = 6;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                curX = nextX;
+                curY = nextY;
+            }
+
+            // Clamp
+            ctx.beginPath();
+            ctx.arc(CENTER_X, CENTER_Y, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+
+            // Drag Node
+            let px = CENTER_X + (kp1 * ROD_LENGTH) * Math.cos(deg2rad(baseAngleDeg));
+            let py = CENTER_Y + (kp1 * ROD_LENGTH) * Math.sin(deg2rad(baseAngleDeg));
+            ctx.beginPath();
+            ctx.arc(px, py, dragging === 'kp1' ? 14 : 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#00d2ff';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function getPointerPos(e) {
+            const rect = simCanvas.getBoundingClientRect();
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (simCanvas.width / rect.width),
+                y: (clientY - rect.top) * (simCanvas.height / rect.height)
+            };
+        }
+
+        function handlePointerDown(e) {
+            const pos = getPointerPos(e);
+            let t = parseInt(timeSlider.value) / 1000;
+            let baseAngleDeg = 240 - (t * 240);
+
+            let px = CENTER_X + (kp1 * ROD_LENGTH) * Math.cos(deg2rad(baseAngleDeg));
+            let py = CENTER_Y + (kp1 * ROD_LENGTH) * Math.sin(deg2rad(baseAngleDeg));
+            if (Math.hypot(pos.x - px, pos.y - py) < 25) {
+                dragging = 'kp1';
+                e.preventDefault();
+                tooltip.style.display = 'block';
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!dragging) return;
+            e.preventDefault();
+            const pos = getPointerPos(e);
+            let t = parseInt(timeSlider.value) / 1000;
+            let baseAngleDeg = 240 - (t * 240);
+
+            let vX = Math.cos(deg2rad(baseAngleDeg));
+            let vY = Math.sin(deg2rad(baseAngleDeg));
+            let dX = pos.x - CENTER_X;
+            let dY = pos.y - CENTER_Y;
+
+            let dotProduct = (dX * vX + dY * vY);
+            kp1 = Math.max(0.05, Math.min(0.95, dotProduct / ROD_LENGTH));
+
+            let horizontalPercent = Math.max(0, Math.min(1, pos.x / simCanvas.width));
+            flex = 125 - (horizontalPercent * 105);
+
+            const rect = simCanvas.getBoundingClientRect();
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            tooltip.style.left = (clientX - rect.left + 15) + 'px';
+            tooltip.style.top = (clientY - rect.top - 30) + 'px';
+            tooltip.innerHTML = `${getKpName(1, kp1)}<br>Flex: ${Math.round(flex)}`;
+
+            precalculatePhysics();
+            drawSim();
+        }
+
+        function syncSimToConfigurator() {
+            // Update nonVisualData so cart gets the properties
+            let finalFlex = Math.round(flex);
+            nonVisualData["Flex"] = { label: finalFlex + " Flex", code: finalFlex.toString(), price: 0 };
+
+            let kpName = getKpName(1, kp1);
+            let kpCode = "KP"; // generic or we can map it based on name
+            if(kpName.includes("Low")) kpCode = "LK";
+            if(kpName.includes("Mid")) kpCode = "MK";
+            if(kpName.includes("High")) kpCode = "HK";
+            nonVisualData["Kick-point"] = { label: kpName, code: kpCode, price: 0 };
+
+            updateHiddenDynamicInputs();
+            updateConfigurator();
+        }
+
+        function handlePointerUp() {
+            if (dragging) {
+                dragging = null;
+                tooltip.style.display = 'none';
+                syncSimToConfigurator(); // Sync to main app on drop
+            }
+        }
+
+        // Attach sim events
+        simCanvas.addEventListener('mousedown', handlePointerDown);
+        simCanvas.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+        simCanvas.addEventListener('touchstart', handlePointerDown, {passive: false});
+        simCanvas.addEventListener('touchmove', handlePointerMove, {passive: false});
+        window.addEventListener('touchend', handlePointerUp);
+
+        timeSlider.addEventListener('input', drawSim);
+        speedSlider.addEventListener('input', () => {
+            precalculatePhysics();
+            drawSim();
+        });
+
+        unitToggle.addEventListener('click', () => {
+            useMph = !useMph;
+            unitToggle.innerText = useMph ? "MPH" : "KM/H";
+            drawSim();
+        });
+
+        // Initialize Sim
+        precalculatePhysics();
+        drawSim();
+
+        // Initial sync of default sim values to configurator
+        syncSimToConfigurator();
+    }
+    // ==========================================
 
     // Event Listeners binden
     if (stickSelect) stickSelect.addEventListener('change', updateConfigurator);
