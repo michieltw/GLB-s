@@ -1,8 +1,36 @@
 <!-- Laad de model-viewer bibliotheek in (indien nog niet elders in het thema geladen) -->
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
 
-<div class="hockey-stick-configurator horizon-section" data-section-id="{{ section.id }}">
-  <div class="configurator-layout">
+<div class="hockey-stick-configurator horizon-section" data-section-id="{{ section.id }}" id="configurator-wrapper-{{ section.id }}">
+
+  <!-- Splash Screen -->
+  <div id="splash-screen-{{ section.id }}" class="splash-screen">
+      <div class="splash-content">
+          <h2>Kies je customizer ervaring</h2>
+          <p>Weet je al precies wat je wil, of heb je liever dat we je adviseren op basis van je profiel?</p>
+          <div class="splash-buttons">
+              <button id="btn-smart-track-{{ section.id }}" class="splash-btn primary-btn">✨ Begeleide Smart Track</button>
+              <button id="btn-regular-track-{{ section.id }}" class="splash-btn secondary-btn">⚙️ Volledige Vrije Keuze</button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Smart Track Wizard -->
+  <div id="smart-wizard-{{ section.id }}" class="smart-wizard" style="display:none;">
+      <div class="wizard-header">
+          <h2>Vraag <span id="wizard-current-step-{{ section.id }}">1</span> van <span id="wizard-total-steps-{{ section.id }}">X</span></h2>
+          <button id="btn-wizard-skip-{{ section.id }}" class="secondary-btn btn-small">Overslaan</button>
+      </div>
+      <div class="wizard-body" id="wizard-questions-container-{{ section.id }}">
+          <!-- Wizard questions will be injected here via JS -->
+      </div>
+      <div class="wizard-footer">
+          <button id="btn-wizard-prev-{{ section.id }}" class="secondary-btn" disabled>Vorige</button>
+          <button id="btn-wizard-next-{{ section.id }}" class="primary-btn">Volgende</button>
+      </div>
+  </div>
+
+  <div class="configurator-layout" id="main-configurator-{{ section.id }}" style="display:none;">
 
     <!-- 3D Viewer Section -->
     <div class="viewer-section">
@@ -66,7 +94,7 @@
         <!-- Stick Modellen Selectie -->
         <div class="option-group">
           <label for="stick-model-select-{{ section.id }}">Kies je model:</label>
-          <select id="stick-model-select-{{ section.id }}" class="config-select dynamic-option" data-code-prefix="MOD">
+          <select id="stick-model-select-{{ section.id }}" class="config-select dynamic-option" data-code-prefix="MOD" data-track-visibility="{{ block.settings.track_visibility | default: 'both' }}">
             {% assign has_models = false %}
             {% for block in section.blocks %}
               {% if block.type == 'stick_model' %}
@@ -122,6 +150,7 @@
               <label for="text-input-{{ block.id }}">{{ block.settings.title }}:</label>
               <input type="text" id="text-input-{{ block.id }}"
                      class="config-input dynamic-option text-input-option"
+                     data-track-visibility="{{ block.settings.track_visibility | default: 'both' }}"
                      data-category="{{ block.settings.title }}"
                      data-extra-price="{{ block.settings.extra_price | default: 0 }}"
                      maxlength="{{ block.settings.max_length | default: 20 }}"
@@ -183,14 +212,17 @@
               <label for="text-option-{{ block.id }}">{{ block.settings.title }}:</label>
               <select id="text-option-{{ block.id }}"
                       class="config-select dynamic-option non-visual-option"
+                      data-track-visibility="{{ block.settings.track_visibility | default: 'both' }}"
                       data-category="{{ block.settings.title }}"
-                      data-extra-price="{{ block.settings.extra_price | default: 0 }}">
+                      data-extra-price="{{ block.settings.extra_price | default: 0 }}"
+                   data-track-visibility="{{ block.settings.track_visibility | default: 'both' }}">
                 {% assign options = block.settings.options | split: ',' %}
                 {% for option in options %}
                   {% assign opt_parts = option | split: ':' %}
                   {% assign opt_label = opt_parts[0] | strip %}
                   {% assign opt_code = opt_parts[1] | default: opt_label | strip %}
-                  <option value="{{ opt_label }}" data-code="{{ opt_code }}" data-extra-price="{{ block.settings.extra_price | default: 0 }}">{{ opt_label }}{% if block.settings.extra_price > 0 %} (+{{ block.settings.extra_price | money }}){% endif %}</option>
+                  <option value="{{ opt_label }}" data-code="{{ opt_code }}" data-extra-price="{{ block.settings.extra_price | default: 0 }}"
+                   data-track-visibility="{{ block.settings.track_visibility | default: 'both' }}">{{ opt_label }}{% if block.settings.extra_price > 0 %} (+{{ block.settings.extra_price | money }}){% endif %}</option>
                 {% endfor %}
               </select>
             </div>
@@ -208,6 +240,28 @@
           <!-- Wordt gevuld via JS om de blokken per materiaal te groeperen -->
         </div>
 
+        <!-- Smart Track Data -->
+        <div id="smart-track-data-{{ section.id }}" style="display:none;">
+          {% for block in section.blocks %}
+            {% if block.type == 'smart_question' %}
+              <div class="smart-question-data"
+                   data-id="{{ block.settings.question_id }}"
+                   data-title="{{ block.settings.title }}"
+                   data-input-type="{{ block.settings.input_type }}"
+                   data-options="{{ block.settings.options }}">
+              </div>
+            {% elsif block.type == 'smart_rule' %}
+              <div class="smart-rule-data"
+                   data-condition-id="{{ block.settings.condition_question_id }}"
+                   data-operator="{{ block.settings.operator }}"
+                   data-condition-value="{{ block.settings.condition_value }}"
+                   data-target-category="{{ block.settings.target_category }}"
+                   data-target-value="{{ block.settings.target_value }}">
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+
         <!-- Verborgen container voor alle blok data uit Liquid zodat JS het kan parsen -->
         <div id="block-data-{{ section.id }}" style="display:none;">
           {% for block in section.blocks %}
@@ -218,7 +272,8 @@
                    data-hex="{{ block.settings.color_hex }}"
                    data-index="{{ block.settings.material_index }}"
                    data-category="{{ block.settings.category_name }}"
-                   data-extra-price="{{ block.settings.extra_price | default: 0 }}">
+                   data-extra-price="{{ block.settings.extra_price | default: 0 }}"
+                   data-track-visibility="{{ block.settings.track_visibility | default: 'both' }}">
               </div>
             {% elsif block.type == 'finish_option' %}
               <div class="block-data-item"
@@ -227,7 +282,8 @@
                    data-roughness="{{ block.settings.roughness }}"
                    data-index="{{ block.settings.material_index }}"
                    data-category="{{ block.settings.category_name }}"
-                   data-extra-price="{{ block.settings.extra_price | default: 0 }}">
+                   data-extra-price="{{ block.settings.extra_price | default: 0 }}"
+                   data-track-visibility="{{ block.settings.track_visibility | default: 'both' }}">
               </div>
             {% elsif block.type == 'texture_option' %}
               <div class="block-data-item"
@@ -237,7 +293,8 @@
                    data-texture-type="{{ block.settings.texture_type }}"
                    data-index="{{ block.settings.material_index }}"
                    data-category="{{ block.settings.category_name }}"
-                   data-extra-price="{{ block.settings.extra_price | default: 0 }}">
+                   data-extra-price="{{ block.settings.extra_price | default: 0 }}"
+                   data-track-visibility="{{ block.settings.track_visibility | default: 'both' }}">
               </div>
             {% endif %}
           {% endfor %}
@@ -296,6 +353,25 @@
   .texture-loading-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.7); z-index: 50; flex-direction: column; justify-content: center; align-items: center; border-radius: 8px; backdrop-filter: blur(2px); }
   .texture-loading-overlay .spinner { border: 4px solid rgba(0, 0, 0, 0.1); width: 40px; height: 40px; border-radius: 50%; border-left-color: #000; animation: spin 1s linear infinite; margin-bottom: 10px; }
   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  /* Splash & Wizard Styles */
+  .splash-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 100; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+  .splash-content { text-align: center; padding: 2rem; max-width: 600px; }
+  .splash-content h2 { font-size: 2rem; margin-bottom: 1rem; }
+  .splash-buttons { display: flex; gap: 1rem; justify-content: center; margin-top: 2rem; }
+  .splash-btn { padding: 1rem 2rem; font-size: 1.1rem; border-radius: 8px; cursor: pointer; border: 2px solid #000; font-weight: bold; }
+  .primary-btn { background: #000; color: #fff; }
+  .primary-btn:hover { background: #333; }
+
+  .smart-wizard { background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; position: relative; z-index: 100; }
+  .wizard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1rem; }
+  .wizard-question { display: none; }
+  .wizard-question.active { display: block; animation: fadeIn 0.3s ease; }
+  .wizard-question h3 { font-size: 1.5rem; margin-bottom: 1rem; }
+  .wizard-question input, .wizard-question select { width: 100%; padding: 1rem; font-size: 1.1rem; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 1rem; }
+  .wizard-footer { display: flex; justify-content: space-between; margin-top: 2rem; }
+  .btn-small { padding: 0.5rem 1rem; font-size: 0.9rem; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
   /* Simulator Styles */
   .hockey-stick-configurator .sim-canvas-container { width: 100%; display: flex; justify-content: center; align-items: center; position: relative; background-color: #121212; }
@@ -316,6 +392,22 @@
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const sectionId = "{{ section.id }}";
+
+    const btnRegular = document.getElementById(`btn-regular-track-${sectionId}`);
+    if(btnRegular) btnRegular.addEventListener('click', startRegularTrack);
+
+    const btnSmart = document.getElementById(`btn-smart-track-${sectionId}`);
+    if(btnSmart) btnSmart.addEventListener('click', startSmartTrack);
+
+    const btnWizardNext = document.getElementById(`btn-wizard-next-${sectionId}`);
+    if(btnWizardNext) btnWizardNext.addEventListener('click', nextWizardStep);
+
+    const btnWizardPrev = document.getElementById(`btn-wizard-prev-${sectionId}`);
+    if(btnWizardPrev) btnWizardPrev.addEventListener('click', prevWizardStep);
+
+    const btnWizardSkip = document.getElementById(`btn-wizard-skip-${sectionId}`);
+    if(btnWizardSkip) btnWizardSkip.addEventListener('click', finishWizard);
+
     const modelViewer = document.getElementById(`stick-model-viewer-${sectionId}`);
 
     // UI Elements
@@ -348,6 +440,229 @@
     // In-memory cache om texture objecten te bewaren
     let textureCache = {};
 
+    // --- Routing & Track State ---
+    let currentTrack = 'both'; // 'regular' or 'smart'
+    let smartQuestions = [];
+    let smartRules = [];
+    let currentWizardStep = 0;
+
+    const splashScreen = document.getElementById(`splash-screen-${sectionId}`);
+    const smartWizard = document.getElementById(`smart-wizard-${sectionId}`);
+    const mainConfigurator = document.getElementById(`main-configurator-${sectionId}`);
+
+    // Parse Smart Data
+    document.querySelectorAll(`#smart-track-data-${sectionId} .smart-question-data`).forEach(el => {
+        smartQuestions.push({
+            id: el.getAttribute('data-id'),
+            title: el.getAttribute('data-title'),
+            type: el.getAttribute('data-input-type'),
+            options: el.getAttribute('data-options'),
+            answer: null
+        });
+    });
+    document.querySelectorAll(`#smart-track-data-${sectionId} .smart-rule-data`).forEach(el => {
+        smartRules.push({
+            condId: el.getAttribute('data-condition-id'),
+            operator: el.getAttribute('data-operator'),
+            condVal: el.getAttribute('data-condition-value'),
+            targetCat: el.getAttribute('data-target-category'),
+            targetVal: el.getAttribute('data-target-value')
+        });
+    });
+
+    function applyTrackFiltering() {
+        // We filteren de UI elementen o.b.v. data-track-visibility
+        const allGroups = document.querySelectorAll(`#configurator-wrapper-${sectionId} .option-group`);
+
+        allGroups.forEach(group => {
+            // Check if group contains specific elements to filter
+            let hasVisibleElements = false;
+
+            // Check selects/inputs inside
+            const inputs = group.querySelectorAll('[data-track-visibility]');
+            if(inputs.length > 0) {
+               inputs.forEach(input => {
+                   const vis = input.getAttribute('data-track-visibility');
+                   if (vis === 'both' || vis === currentTrack) {
+                       input.style.display = '';
+                       if(input.parentElement && input.parentElement.classList.contains('radio-box')) {
+                           input.parentElement.style.display = '';
+                       }
+                       hasVisibleElements = true;
+                   } else {
+                       input.style.display = 'none';
+                       if(input.parentElement && input.parentElement.classList.contains('radio-box')) {
+                           input.parentElement.style.display = 'none';
+                       }
+                   }
+               });
+            } else {
+               // Volledige groep (bijv kleurenswatches op basis van class) check
+               // Voor nu is hasVisibleElements true als we geen specifieke in-group attributen vinden
+               hasVisibleElements = true;
+            }
+
+            // Check ook op data-track-visibility attribuut dat we aan de options (opt.vis) meegaven bij JS build.
+            // Hiervoor passen we zo buildDynamicUI aan.
+
+            group.style.display = hasVisibleElements ? '' : 'none';
+        });
+    }
+
+    function startRegularTrack() {
+        currentTrack = 'regular';
+        if (splashScreen) splashScreen.style.display = 'none';
+        if (mainConfigurator) mainConfigurator.style.display = 'flex'; // Assuming .configurator-layout is flex
+        applyTrackFiltering();
+        updateConfigurator();
+    }
+
+    function renderWizardStep() {
+        const container = document.getElementById(`wizard-questions-container-${sectionId}`);
+        if(!container) return;
+        container.innerHTML = '';
+
+        if (smartQuestions.length === 0) {
+            finishWizard();
+            return;
+        }
+
+        const q = smartQuestions[currentWizardStep];
+        document.getElementById(`wizard-current-step-${sectionId}`).textContent = currentWizardStep + 1;
+        document.getElementById(`wizard-total-steps-${sectionId}`).textContent = smartQuestions.length;
+
+        const qDiv = document.createElement('div');
+        qDiv.className = 'wizard-question active';
+
+        const title = document.createElement('h3');
+        title.textContent = q.title;
+        qDiv.appendChild(title);
+
+        if (q.type === 'select') {
+            const select = document.createElement('select');
+            select.id = `smart-input-${q.id}`;
+            const opts = q.options.split(',');
+            opts.forEach(o => {
+               const opt = document.createElement('option');
+               opt.value = o.trim();
+               opt.textContent = o.trim();
+               select.appendChild(opt);
+            });
+            if(q.answer) select.value = q.answer;
+            qDiv.appendChild(select);
+        } else {
+            const input = document.createElement('input');
+            input.type = q.type === 'number' ? 'number' : 'text';
+            input.id = `smart-input-${q.id}`;
+            if(q.answer) input.value = q.answer;
+            qDiv.appendChild(input);
+        }
+
+        container.appendChild(qDiv);
+
+        document.getElementById(`btn-wizard-prev-${sectionId}`).disabled = currentWizardStep === 0;
+        document.getElementById(`btn-wizard-next-${sectionId}`).textContent = currentWizardStep === smartQuestions.length - 1 ? 'Naar Configurator' : 'Volgende';
+    }
+
+    function saveWizardAnswer() {
+        if(smartQuestions.length === 0) return;
+        const q = smartQuestions[currentWizardStep];
+        const input = document.getElementById(`smart-input-${q.id}`);
+        if(input) {
+            q.answer = input.value;
+        }
+    }
+
+    function startSmartTrack() {
+        currentTrack = 'smart';
+        if (splashScreen) splashScreen.style.display = 'none';
+        if (smartWizard) smartWizard.style.display = 'block';
+        currentWizardStep = 0;
+        renderWizardStep();
+    }
+
+    function nextWizardStep() {
+        saveWizardAnswer();
+        if (currentWizardStep < smartQuestions.length - 1) {
+            currentWizardStep++;
+            renderWizardStep();
+        } else {
+            finishWizard();
+        }
+    }
+
+    function prevWizardStep() {
+        saveWizardAnswer();
+        if (currentWizardStep > 0) {
+            currentWizardStep--;
+            renderWizardStep();
+        }
+    }
+
+    function evaluateSmartRules() {
+        // Build an answers dictionary
+        let answers = {};
+        smartQuestions.forEach(q => {
+            answers[q.id] = q.answer;
+        });
+
+        smartRules.forEach(rule => {
+            const answer = answers[rule.condId];
+            if(answer === undefined || answer === null) return;
+
+            let conditionMet = false;
+
+            if(rule.operator === '==') {
+                conditionMet = answer.toString().toLowerCase() === rule.condVal.toLowerCase();
+            } else if (rule.operator === '<') {
+                conditionMet = parseFloat(answer) < parseFloat(rule.condVal);
+            } else if (rule.operator === '>') {
+                conditionMet = parseFloat(answer) > parseFloat(rule.condVal);
+            }
+
+            if(conditionMet) {
+                // Find matching non-visual select by category
+                const targetSelect = document.querySelector(`.non-visual-option[data-category="${rule.targetCat}"]`);
+                if(targetSelect) {
+                    for(let i=0; i<targetSelect.options.length; i++) {
+                        if(targetSelect.options[i].value.toLowerCase().includes(rule.targetVal.toLowerCase())) {
+                            targetSelect.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                // Find matching visual select
+                const targetVisualSelect = document.querySelector(`.visual-select-option[data-category="${rule.targetCat}"]`);
+                if(targetVisualSelect) {
+                    for(let i=0; i<targetVisualSelect.options.length; i++) {
+                        if(targetVisualSelect.options[i].value.toLowerCase().includes(rule.targetVal.toLowerCase())) {
+                            targetVisualSelect.selectedIndex = i;
+
+                            // trigger fake change to set states
+                            const ev = new Event('change');
+                            targetVisualSelect.dispatchEvent(ev);
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function finishWizard() {
+        saveWizardAnswer();
+        evaluateSmartRules();
+
+        if (smartWizard) smartWizard.style.display = 'none';
+        if (mainConfigurator) mainConfigurator.style.display = 'flex';
+
+        applyTrackFiltering();
+        updateConfigurator();
+    }
+
+    // --- End Routing ---
+
     // 1. Initialiseer UI groepen vanuit HTML Data
     function buildDynamicUI() {
        const blockItems = document.querySelectorAll(`#block-data-${sectionId} .block-data-item`);
@@ -363,22 +678,23 @@
            const code = title ? title.substring(0,3).toUpperCase() : "OPT";
 
            const price = parseInt(item.getAttribute('data-extra-price') || "0");
+           const vis = item.getAttribute('data-track-visibility') || "both";
 
            if(type === 'color') {
                const hex = item.getAttribute('data-hex');
                if(!groupedColors[cat]) groupedColors[cat] = { index: idx, options: [] };
-               groupedColors[cat].options.push({ hex, title, code, price });
+               groupedColors[cat].options.push({ hex, title, code, price, vis });
            }
            else if (type === 'finish') {
                const roughness = item.getAttribute('data-roughness');
                if(!groupedSelects[cat]) groupedSelects[cat] = { type: 'finish', index: idx, options: [] };
-               groupedSelects[cat].options.push({ roughness, title, code, price });
+               groupedSelects[cat].options.push({ roughness, title, code, price, vis });
            }
            else if (type === 'texture') {
                const url = item.getAttribute('data-image-url');
                const texType = item.getAttribute('data-texture-type');
                if(!groupedSelects[cat]) groupedSelects[cat] = { type: 'texture', index: idx, texType: texType, options: [] };
-               groupedSelects[cat].options.push({ url, title, code, price });
+               groupedSelects[cat].options.push({ url, title, code, price, vis });
            }
        });
 
@@ -399,6 +715,7 @@
                if (index === 0) btn.classList.add('active');
                btn.style.backgroundColor = opt.hex;
                btn.title = opt.title;
+               btn.setAttribute('data-track-visibility', opt.vis);
 
                btn.addEventListener('click', function() {
                   Array.from(btnContainer.children).forEach(c => c.classList.remove('active'));
@@ -440,6 +757,7 @@
                        btn.textContent = '∅';
                    }
                    btn.title = opt.title;
+               btn.setAttribute('data-track-visibility', opt.vis);
 
                    btn.addEventListener('click', function() {
                       Array.from(btnContainer.children).forEach(c => c.classList.remove('active'));
@@ -465,6 +783,7 @@
                    optionEl.textContent = opt.title + (opt.price > 0 ? ` (+€ ${(opt.price/100).toFixed(2).replace('.', ',')})` : '');
                    optionEl.setAttribute('data-code', opt.code);
                    optionEl.setAttribute('data-extra-price', opt.price);
+                   optionEl.setAttribute('data-track-visibility', opt.vis);
 
                    if(data.type === 'finish') {
                        optionEl.setAttribute('data-roughness', opt.roughness);
@@ -520,6 +839,20 @@
     function updateHiddenDynamicInputs() {
         // Verwijder oude dynamische inputs
         document.querySelectorAll(`.dynamic-hidden-property-${sectionId}`).forEach(el => el.remove());
+
+        // Voeg Smart Track Antwoorden toe aan winkelwagen properties
+        if (currentTrack === 'smart') {
+            smartQuestions.forEach(q => {
+               if(q.answer) {
+                   const input = document.createElement('input');
+                   input.type = 'hidden';
+                   input.name = `properties[Smart: ${q.title}]`;
+                   input.value = q.answer;
+                   input.className = `dynamic-hidden-property-${sectionId}`;
+                   cartForm.appendChild(input);
+               }
+            });
+        }
 
         // Kleuren
         for (const [idx, colorData] of Object.entries(activeColors)) {
@@ -1210,6 +1543,18 @@
           "info": "Bijv. 2000 voor €20,00 extra",
           "default": 0
         }
+        ,
+        {
+          "type": "select",
+          "id": "track_visibility",
+          "label": "Zichtbaarheid in Track",
+          "options": [
+            { "value": "both", "label": "Beide (Regular & Smart)" },
+            { "value": "regular", "label": "Alleen Regular Track" },
+            { "value": "smart", "label": "Alleen Smart Track" }
+          ],
+          "default": "both"
+        }
       ]
     },
     {
@@ -1248,6 +1593,18 @@
           "label": "Meerprijs (in centen)",
           "info": "Bijv. 1000 voor €10,00 extra",
           "default": 0
+        }
+        ,
+        {
+          "type": "select",
+          "id": "track_visibility",
+          "label": "Zichtbaarheid in Track",
+          "options": [
+            { "value": "both", "label": "Beide (Regular & Smart)" },
+            { "value": "regular", "label": "Alleen Regular Track" },
+            { "value": "smart", "label": "Alleen Smart Track" }
+          ],
+          "default": "both"
         }
       ]
     },
@@ -1290,6 +1647,18 @@
           "label": "Meerprijs (in centen)",
           "info": "Bijv. 1000 voor €10,00 extra",
           "default": 0
+        }
+        ,
+        {
+          "type": "select",
+          "id": "track_visibility",
+          "label": "Zichtbaarheid in Track",
+          "options": [
+            { "value": "both", "label": "Beide (Regular & Smart)" },
+            { "value": "regular", "label": "Alleen Regular Track" },
+            { "value": "smart", "label": "Alleen Smart Track" }
+          ],
+          "default": "both"
         }
       ]
     },
@@ -1339,6 +1708,94 @@
           "info": "Bijv. 1000 voor €10,00 extra",
           "default": 0
         }
+        ,
+        {
+          "type": "select",
+          "id": "track_visibility",
+          "label": "Zichtbaarheid in Track",
+          "options": [
+            { "value": "both", "label": "Beide (Regular & Smart)" },
+            { "value": "regular", "label": "Alleen Regular Track" },
+            { "value": "smart", "label": "Alleen Smart Track" }
+          ],
+          "default": "both"
+        }
+      ]
+    },
+    {
+      "type": "smart_question",
+      "name": "Smart Track Vraag",
+      "settings": [
+        {
+          "type": "text",
+          "id": "question_id",
+          "label": "Unieke Vraag ID",
+          "info": "Bijv. 'leeftijd' of 'gewicht'. Zonder spaties."
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Vraag tekst",
+          "info": "Bijv. 'Wat is je gewicht?'"
+        },
+        {
+          "type": "select",
+          "id": "input_type",
+          "label": "Soort invoer",
+          "options": [
+            { "value": "number", "label": "Getal" },
+            { "value": "text", "label": "Vrije tekst" },
+            { "value": "select", "label": "Meerkeuze (Dropdown)" }
+          ],
+          "default": "number"
+        },
+        {
+          "type": "textarea",
+          "id": "options",
+          "label": "Keuzes (indien Meerkeuze)",
+          "info": "Komma-gescheiden. Bijv. Aanvaller,Verdediger,Goalie"
+        }
+      ]
+    },
+    {
+      "type": "smart_rule",
+      "name": "Smart Track Regel",
+      "settings": [
+        {
+          "type": "text",
+          "id": "condition_question_id",
+          "label": "Als Vraag ID...",
+          "info": "Bijv. 'gewicht'"
+        },
+        {
+          "type": "select",
+          "id": "operator",
+          "label": "Is...",
+          "options": [
+            { "value": "==", "label": "Gelijk aan" },
+            { "value": "<", "label": "Kleiner dan" },
+            { "value": ">", "label": "Groter dan" }
+          ],
+          "default": "=="
+        },
+        {
+          "type": "text",
+          "id": "condition_value",
+          "label": "Waarde",
+          "info": "Bijv. '80' of 'Aanvaller'"
+        },
+        {
+          "type": "text",
+          "id": "target_category",
+          "label": "Dan, verander Specificatie",
+          "info": "Komt overeen met de 'Titel' van de optie. Bijv. 'Shaft vorm'"
+        },
+        {
+          "type": "text",
+          "id": "target_value",
+          "label": "Naar waarde",
+          "info": "Komt overeen met de Optie Naam/Waarde. Bijv. 'Junior'"
+        }
       ]
     },
     {
@@ -1362,6 +1819,18 @@
           "id": "max_length",
           "label": "Maximum aantal karakters",
           "default": 20
+        }
+        ,
+        {
+          "type": "select",
+          "id": "track_visibility",
+          "label": "Zichtbaarheid in Track",
+          "options": [
+            { "value": "both", "label": "Beide (Regular & Smart)" },
+            { "value": "regular", "label": "Alleen Regular Track" },
+            { "value": "smart", "label": "Alleen Smart Track" }
+          ],
+          "default": "both"
         }
       ]
     },
@@ -1387,6 +1856,18 @@
           "label": "Meerprijs (in centen)",
           "info": "Bijv. 1000 voor €10,00 extra",
           "default": 0
+        }
+        ,
+        {
+          "type": "select",
+          "id": "track_visibility",
+          "label": "Zichtbaarheid in Track",
+          "options": [
+            { "value": "both", "label": "Beide (Regular & Smart)" },
+            { "value": "regular", "label": "Alleen Regular Track" },
+            { "value": "smart", "label": "Alleen Smart Track" }
+          ],
+          "default": "both"
         }
       ]
     }
