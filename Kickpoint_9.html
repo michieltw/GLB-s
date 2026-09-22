@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hockey Stick Flex & Zone Simulatie</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            cursor: grab;
+        }
+        
+        #canvas-container:active {
+            cursor: grabbing;
+        }
+
+        canvas {
+            background-color: #1a1a1a;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.8);
+            border-bottom: 1px solid #333;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        #controls {
+            width: 100%;
+            background-color: #222;
+            padding: 15px 20px 25px 20px;
+            box-sizing: border-box;
+            border-top: 2px solid #444;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-height: 45vh;
+            overflow-y: auto;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        label { font-weight: bold; font-size: 14px; color: #ddd; }
+        .val-display { color: #00d2ff; font-weight: bold; font-family: monospace; font-size: 16px;}
+        
+        .speed-category { font-size: 12px; color: #aaa; font-style: italic; }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 12px;
+            border-radius: 6px;
+            background: #444;
+            outline: none;
+            margin: 10px 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #00d2ff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
+        }
+
+        .toggles {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            font-size: 14px;
+            align-items: center;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            background: #333;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+
+        input[type="checkbox"] { width: 18px; height: 18px; }
+
+        button.info-btn, button.zoom-btn {
+            background-color: #00d2ff; color: #000; border: none;
+            border-radius: 4px; padding: 4px 10px; font-weight: bold;
+            cursor: pointer; font-size: 13px;
+        }
+        button.unit-btn {
+            background-color: #444; color: #fff; border: 1px solid #666;
+            border-radius: 4px; padding: 2px 6px; cursor: pointer;
+            font-size: 11px; margin-left: 10px;
+        }
+        button.zoom-btn {
+            background-color: #444; color: #fff; border: 1px solid #666;
+            padding: 6px 12px; margin-left: 5px; font-size: 14px;
+        }
+
+        #advancedSettings {
+            display: none;
+            background: #181818;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 12px;
+            gap: 10px;
+        }
+
+        #advancedSettings.open {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+
+        .advanced-control {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .advanced-control label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .advanced-control input[type="range"] {
+            height: 8px;
+            margin: 5px 0;
+        }
+
+        .advanced-control input[type="range"]::-webkit-slider-thumb {
+            width: 18px;
+            height: 18px;
+        }
+
+        #dragTooltip {
+            position: absolute; background: rgba(0,0,0,0.8); color: #fff;
+            padding: 5px 10px; border-radius: 4px; font-size: 12px;
+            pointer-events: none; display: none; white-space: nowrap;
+            z-index: 100; border: 1px solid #00d2ff; text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <canvas id="simCanvas" width="700" height="460"></canvas>
+        <div id="dragTooltip">Tooltip</div>
+    </div>
+
+    <div id="controls">
+        <div class="control-group">
+            <div class="header-row">
+                <label>Swing Rotation:</label>
+                <span class="val-display" id="valRot">130°</span>
+            </div>
+            <input type="range" id="timeSlider" min="0" max="1000" value="0">
+        </div>
+
+        <div class="control-group">
+            <div class="header-row">
+                <label style="display:flex; align-items:center; gap: 10px;">
+                    Shot Speed: 
+                    <button class="info-btn" onclick="alert('Record Info:\n\nKHL: 183,7 km/h (Bauer Supreme, 112 Flex)\nNHL: 175,1 km/h (Warrior Dynasty, 150 Flex)')">ℹ Info</button>
+                    <button class="unit-btn" id="unitToggle">KM/H</button>
+                </label>
+                <span class="val-display" id="valSpeed">100 km/h</span>
+            </div>
+            <span class="speed-category" id="speedCat">Gevorderd</span>
+            <input type="range" id="speedSlider" min="20" max="200" value="100">
+        </div>
+
+        <div class="toggles">
+            <label class="checkbox-label">
+                <input type="checkbox" id="cbKp2"> + Kick Zone 2
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="cbKp3"> + Kick Zone 3
+            </label>
+            <label class="checkbox-label" style="margin-left: 10px; border-left: 2px solid #555; padding-left: 15px;">
+                <input type="checkbox" id="cbShowHelpers" checked> 👁️ Toon Hulplijnen
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="cbNeverBreak"> Nooit breken
+            </label>
+            <div style="flex-grow: 1;"></div>
+            <button class="zoom-btn" onclick="doZoom(0.8)">🔍 -</button>
+            <button class="zoom-btn" onclick="doZoom(1.25)">🔍 +</button>
+        </div>
+        <button class="zoom-btn" id="advancedToggle" type="button">⚙ Advanced settings</button>
+
+        <div id="advancedSettings">
+            <div class="advanced-control">
+                <label>Base bend <span id="advBendValue"></span></label>
+                <input type="range" id="advBend" min="1" max="80" step="1" value="60">
+            </div>
+            <div class="advanced-control">
+                <label>Flex resistance <span id="advResistanceValue"></span></label>
+                <input type="range" id="advResistance" min="0" max="1" step="0.01" value="0.60">
+            </div>
+            <div class="advanced-control">
+                <label>Speed curve <span id="advSpeedCurveValue"></span></label>
+                <input type="range" id="advSpeedCurve" min="0.5" max="2" step="0.05" value="1">
+            </div>
+            <div class="advanced-control">
+                <label>Flex 20 break angle <span id="advBreakLowValue"></span></label>
+                <input type="range" id="advBreakLow" min="20" max="80" step="1" value="40">
+            </div>
+            <div class="advanced-control">
+                <label>Flex 125 break angle <span id="advBreakHighValue"></span></label>
+                <input type="range" id="advBreakHigh" min="15" max="80" step="1" value="25">
+            </div>
+            <div class="advanced-control">
+                <label>Local angle scale <span id="advAngleScaleValue"></span></label>
+                <input type="range" id="advAngleScale" min="0.1" max="10" step="0.1" value="1">
+            </div>
+            <div class="advanced-control">
+                <label>Whip strength <span id="advWhipValue"></span></label>
+                <input type="range" id="advWhip" min="0" max="1" step="0.01" value="0.15">
+            </div>
+            <div class="advanced-control">
+                <label>Bend start <span id="advStartValue"></span></label>
+                <input type="range" id="advStart" min="0.3" max="0.8" step="0.01" value="0.5625">
+            </div>
+            <div class="advanced-control">
+                <label>Bend peak/end <span id="advPeakValue"></span></label>
+                <input type="range" id="advPeak" min="0.65" max="0.98" step="0.01" value="0.85">
+            </div>
+            <div class="advanced-control">
+                <label>Force strength <span id="advForceStrengthValue"></span></label>
+                <input type="range" id="advForceStrength" min="0.1" max="10" step="0.1" value="1">
+            </div>
+            <div class="advanced-control">
+                <label>Force curve <span id="advForceCurveValue"></span></label>
+                <input type="range" id="advForceCurve" min="0.5" max="3" step="0.05" value="1">
+            </div>
+            <div class="advanced-control">
+                <label>Clamp position <span id="advClampPositionValue"></span></label>
+                <input type="range" id="advClampPosition" min="0.02" max="0.4" step="0.01" value="0.12">
+            </div>
+            <div class="advanced-control">
+                <label>Floor friction <span id="advFloorFrictionValue"></span></label>
+                <input type="range" id="advFloorFriction" min="0" max="1" step="0.01" value="0.35">
+            </div>
+            <div class="advanced-control">
+                <label>Puck impact strength <span id="advImpactStrengthValue"></span></label>
+                <input type="range" id="advImpactStrength" min="0" max="2" step="0.01" value="1">
+            </div>
+            <div class="advanced-control">
+                <label>Elastic recoil <span id="advRecoilStrengthValue"></span></label>
+                <input type="range" id="advRecoilStrength" min="0" max="2" step="0.01" value="0.7">
+            </div>
+        </div>
+
+        <div style="font-size: 11px; color: #888; text-align: center; margin-top: 5px;">
+            Sleep op een leeg stuk canvas om te verplaatsen (Pan). <br>Sleep de bolletjes/vierkantjes voor configuratie, en horizontaal voor Flex.
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('dragTooltip');
+        
+        const timeSlider = document.getElementById('timeSlider');
+        const speedSlider = document.getElementById('speedSlider');
+        const unitToggle = document.getElementById('unitToggle');
+        const cbKp2 = document.getElementById('cbKp2');
+        const cbKp3 = document.getElementById('cbKp3');
+        const cbShowHelpers = document.getElementById('cbShowHelpers');
+        const cbNeverBreak = document.getElementById('cbNeverBreak');
+        const valRot = document.getElementById('valRot');
+        const valSpeed = document.getElementById('valSpeed');
+        const speedCat = document.getElementById('speedCat');
+
+        const advancedToggle = document.getElementById('advancedToggle');
+        const advancedSettings = document.getElementById('advancedSettings');
+        const advancedControls = {
+            bend: document.getElementById('advBend'),
+            resistance: document.getElementById('advResistance'),
+            speedCurve: document.getElementById('advSpeedCurve'),
+            breakLow: document.getElementById('advBreakLow'),
+            breakHigh: document.getElementById('advBreakHigh'),
+            angleScale: document.getElementById('advAngleScale'),
+            whip: document.getElementById('advWhip'),
+            start: document.getElementById('advStart'),
+            peak: document.getElementById('advPeak'),
+            forceStrength: document.getElementById('advForceStrength'),
+            forceCurve: document.getElementById('advForceCurve'),
+            clampPosition: document.getElementById('advClampPosition'),
+            floorFriction: document.getElementById('advFloorFriction'),
+            impactStrength: document.getElementById('advImpactStrength'),
+            recoilStrength: document.getElementById('advRecoilStrength')
+        };
+        const advancedValues = {
+            bend: document.getElementById('advBendValue'),
+            resistance: document.getElementById('advResistanceValue'),
+            speedCurve: document.getElementById('advSpeedCurveValue'),
+            breakLow: document.getElementById('advBreakLowValue'),
+            breakHigh: document.getElementById('advBreakHighValue'),
+            angleScale: document.getElementById('advAngleScaleValue'),
+            whip: document.getElementById('advWhipValue'),
+            start: document.getElementById('advStartValue'),
+            peak: document.getElementById('advPeakValue'),
+            forceStrength: document.getElementById('advForceStrengthValue'),
+            forceCurve: document.getElementById('advForceCurveValue'),
+            clampPosition: document.getElementById('advClampPositionValue'),
+            floorFriction: document.getElementById('advFloorFrictionValue'),
+            impactStrength: document.getElementById('advImpactStrengthValue'),
+            recoilStrength: document.getElementById('advRecoilStrengthValue')
+        };
+
+        function getAdvancedNumber(name) {
+            return parseFloat(advancedControls[name].value);
+        }
+
+        function updateAdvancedValueLabels() {
+            Object.keys(advancedControls).forEach(name => {
+                const value = getAdvancedNumber(name);
+                advancedValues[name].textContent = name.includes('break') ? `${value}°` : value;
+            });
+        }
+
+        // Basis instellingen (worden live geschaald door de Pan/Zoom logic)
+        const ROD_LENGTH = 380;
+        const CENTER_X = canvas.width / 2;
+        const CENTER_Y = 40; 
+        const SEGMENTS = 50; 
+
+        // Maximum local bend before snapping. Softer sticks bend farther before breaking.
+        function getBreakLimit(currentFlex) {
+            const clampedFlex = Math.max(20, Math.min(125, currentFlex));
+            const lowLimit = getAdvancedNumber('breakLow');
+            const highLimit = getAdvancedNumber('breakHigh');
+            return lowLimit - ((clampedFlex - 20) * (lowLimit - highLimit) / 105);
+        }
+
+        // State & Pan/Zoom transformaties
+        let kp1 = 0.5; 
+        let kp2 = { c: 0.7, w: 0.1 }; 
+        let kp3 = { c: 0.85, w: 0.1 };
+        let flex = 75; 
+        let useMph = false;
+        
+        // Panning en Zooming Variabelen
+        let zoom = 1.0;
+        let panX = 0;
+        let panY = 0;
+        let dragging = null;
+        let lastPanPos = {x: 0, y: 0};
+
+        let precalculatedTips = [];
+        let brokenState = null;
+        let lastSwingT = null;
+        let breakTriggerT = null;
+        let forcedBreakIndex = -1;
+        const FALL_DISTANCE_PER_SWING = 35;
+        const deg2rad = deg => deg * Math.PI / 180;
+
+        function doZoom(factor) {
+            let centerX = canvas.width / 2;
+            let centerY = canvas.height / 2;
+            panX = centerX - (centerX - panX) * factor;
+            panY = centerY - (centerY - panY) * factor;
+            zoom *= factor;
+            
+            // Limit zoom
+            zoom = Math.max(0.4, Math.min(zoom, 4.0));
+            draw();
+        }
+
+        function getSpeedCategory(speed) {
+            if(speed < 65) return "Beginner";
+            if(speed < 95) return "Gemiddeld";
+            if(speed < 130) return "Gevorderd";
+            if(speed < 160) return "Pro";
+            if(speed < 185) return "Elite";
+            return "Hardste schot ooit";
+        }
+
+        function getKpName(index, val) {
+            if(index === 1) return "Handschoenpositie";
+            let v = val * 100;
+            let suffix = index > 1 ? " Zone" : "";
+            if(v >= 80) return "Ultra-Low Kickpoint" + suffix;
+            if(v >= 65) return "Low Kickpoint" + suffix;
+            if(v >= 55) return "Mid-Low Kickpoint" + suffix;
+            if(v >= 40) return "Mid Kickpoint" + suffix;
+            if(v >= 30) return "Amplified Mid Kickpoint" + suffix;
+            return "High Kickpoint" + suffix;
+        }
+
+        // The rotation is driven by an opposing horizontal force couple:
+        // the clamped upper section is pulled left, while the glove position
+        // is pulled right. The slider controls time through that force stroke.
+        function getForceData(t) {
+            const forceCurve = getAdvancedNumber('forceCurve');
+            const activation = Math.max(0, Math.min(1, t));
+            const forceProgress = Math.pow(activation, forceCurve);
+            const force = getAdvancedNumber('forceStrength') * (0.2 + 0.8 * forceProgress);
+            const clampPosition = getAdvancedNumber('clampPosition');
+            const leverArm = Math.max(0.02, kp1 - clampPosition) * ROD_LENGTH;
+            const nominalAngle = deg2rad(110 - 70 * t);
+            const torque = force * leverArm * Math.abs(Math.sin(nominalAngle));
+            return { force, clampPosition, torque };
+        }
+
+        function getForceRotation(t) {
+            const sampleCount = 60;
+            let accumulatedTorque = 0;
+            let totalTorque = 0;
+
+            for (let i = 0; i <= sampleCount; i++) {
+                const sampleT = i / sampleCount;
+                const torque = getForceData(sampleT).torque;
+                totalTorque += torque;
+                if (sampleT <= t) accumulatedTorque += torque;
+            }
+
+            const progress = totalTorque > 0 ? accumulatedTorque / totalTorque : t;
+            return 130 + (70 * Math.min(1, progress));
+        }
+
+        function getT() {
+            // Keep t as normalized swing progress (0..1). Do not convert the
+            // force-driven rotation back into t; that caused premature bending.
+            return parseInt(timeSlider.value) / 1000;
+        }
+
+        function getSwingAngle(t) {
+            // This is the same 0..240° angle shown by the Swing Rotation
+            // control. Contact must be based on this angle, not on the
+            // separate force-couple calibration angle.
+            return Math.max(0, Math.min(240, t * 240));
+        }
+
+        function getRawBend(t, speed, currentFlex) {
+            // Floor drag starts at 140° of swing rotation. The puck is hit at
+            // 150°. Before 140° the bend is exactly zero.
+            const rotation = getSwingAngle(t);
+            const floorProgress = Math.max(0, Math.min(1, (rotation - 140) / 10));
+            const impactProgress = Math.max(0, Math.min(1, (rotation - 150) / 50));
+            const clampedFlex = Math.max(20, Math.min(125, currentFlex));
+            const flexProgress = (clampedFlex - 20) / 105;
+            const resistance = Math.max(0.05, 1 - flexProgress * getAdvancedNumber('resistance'));
+            const speedFactor = Math.pow(Math.max(0, speed) / 200, getAdvancedNumber('speedCurve'));
+
+            // Floor contact creates a small, gradual bend before the puck is hit.
+            // The friction slider is normalized (0..1), so convert it to a
+            // meaningful angular contribution instead of adding less than one
+            // degree to the entire rod.
+            const floorBend = floorProgress * getAdvancedNumber('floorFriction') *
+                (6 + speedFactor * 6);
+            const impactBend = Math.sin(impactProgress * Math.PI / 2) *
+                speedFactor * getAdvancedNumber('bend') * resistance *
+                getAdvancedNumber('impactStrength');
+            const storedBend = floorBend + impactBend;
+            const recoilProgress = Math.max(0, Math.min(1, (rotation - 175) / 45));
+            const recoil = Math.sin(recoilProgress * Math.PI / 2) *
+                storedBend * getAdvancedNumber('recoilStrength');
+
+            return rotation < 140 ? 0 : storedBend - recoil;
+        }
+
+        function precalculatePhysics() {
+            precalculatedTips = [];
+            const speed = parseFloat(speedSlider.value);
+            
+            for (let i = 0; i <= 1000; i++) {
+                const t = i / 1000;
+                const baseAngle = 240 - (t * 240);
+
+                // Do not clamp the tip angle against the previous sample: that
+                // made higher speeds appear to stop increasing the bend.
+                precalculatedTips.push(getRawBend(t, speed, flex));
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let t = getT();
+            let speed = parseFloat(speedSlider.value);
+            const previousSwingT = lastSwingT;
+            const movingBackward = previousSwingT !== null && t < previousSwingT;
+            const movingForward = previousSwingT !== null && t > previousSwingT;
+
+            // Reversing the swing repairs the break. Keeping the same value does nothing.
+            if (movingBackward) {
+                brokenState = null;
+                breakTriggerT = null;
+            }
+            lastSwingT = t;
+            
+            valRot.innerText = Math.round(getSwingAngle(t)) + "°";
+            valSpeed.innerText = useMph ? Math.round(speed * 0.621371) + " mph" : speed + " km/h";
+            speedCat.innerText = getSpeedCategory(speed);
+
+            // Activeer de Pan/Zoom camera
+            ctx.save();
+            ctx.translate(panX, panY);
+            ctx.scale(zoom, zoom);
+            
+            drawStick(t, previousSwingT, movingForward, speed);
+            
+            // Camera uit
+            ctx.restore();
+        }
+
+        function getWeights() {
+            const weights = [];
+            let weightSum = 0;
+            const sigma1 = 0.12;
+
+            for (let i = 0; i < SEGMENTS; i++) {
+                const pos = i / (SEGMENTS - 1);
+                let weight = Math.exp(-Math.pow(pos - kp1, 2) / (2 * sigma1 * sigma1));
+
+                if (cbKp2.checked) {
+                    const sigma2 = Math.max(0.02, kp2.w / 1.5);
+                    weight += Math.exp(-Math.pow(pos - kp2.c, 2) / (2 * sigma2 * sigma2));
+                }
+                if (cbKp3.checked) {
+                    const sigma3 = Math.max(0.02, kp3.w / 1.5);
+                    weight += Math.exp(-Math.pow(pos - kp3.c, 2) / (2 * sigma3 * sigma3));
+                }
+
+                weights.push(weight);
+                weightSum += weight;
+            }
+            return { weights, weightSum };
+        }
+
+        function findBreakIndex(totalBend, weights, weightSum, rotation = 150) {
+            // Floor contact may bend the rod slightly, but snapping is only
+            // allowed after the puck-impact phase has started.
+            if (cbNeverBreak.checked || rotation < 150) return -1;
+            const breakLimit = getBreakLimit(flex);
+            for (let i = 0; i < SEGMENTS; i++) {
+                // Match the same local-angle calculation used while drawing.
+                // The previous * 0.01 made forward-motion detection use a
+                // different scale from the visible rod and break too early.
+                const localCurvature = Math.abs(
+                    (weights[i] / weightSum) * totalBend * SEGMENTS * getAdvancedNumber('angleScale')
+                );
+                if (localCurvature > breakLimit && i > SEGMENTS * 0.1) return i;
+            }
+            return -1;
+        }
+
+        function findBreakDuringForwardMotion(fromT, toT, speed, weights, weightSum) {
+            // A single slider input event may cover a large part of the swing.
+            // Test every physics sample in that interval so the break cannot be skipped.
+            if (fromT === null || toT <= fromT) return null;
+
+            const firstStep = Math.max(0, Math.floor(fromT * 1000));
+            const lastStep = Math.min(1000, Math.ceil(toT * 1000));
+            for (let step = firstStep; step <= lastStep; step++) {
+                const candidateT = step / 1000;
+                const bend = precalculatedTips[step] ?? getRawBend(candidateT, speed, flex);
+                const candidateRotation = getSwingAngle(candidateT);
+                const breakIndex = findBreakIndex(bend, weights, weightSum, candidateRotation);
+                if (breakIndex >= 0) return { t: candidateT, breakIndex };
+            }
+            return null;
+        }
+
+        function drawStick(t, previousSwingT = null, movingForward = false, speed = parseFloat(speedSlider.value)) {
+            const baseAngleDeg = 240 - (t * 240);
+            
+            let lookupIndex = Math.min(1000, Math.max(0, Math.round(t * 1000)));
+            const totalBend = precalculatedTips[lookupIndex] || 0;
+            const showHelpers = cbShowHelpers.checked;
+
+            // The puck is struck at the lower tip after the 150° impact phase.
+            // Its displacement is driven by the transferred impact energy.
+            drawPuck(t, speed);
+
+            if (showHelpers) {
+                drawOpposingForces(baseAngleDeg, t);
+
+                // Ghost Line
+                ctx.beginPath();
+                ctx.moveTo(CENTER_X, CENTER_Y);
+                const tipX = CENTER_X + ROD_LENGTH * Math.cos(deg2rad(baseAngleDeg));
+                const tipY = CENTER_Y + ROD_LENGTH * Math.sin(deg2rad(baseAngleDeg));
+                ctx.lineTo(tipX, tipY);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 6]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Teken visuele zones
+                if (cbKp2.checked) drawZoneVisual(kp2, baseAngleDeg, 'rgba(255,0,212,');
+                if (cbKp3.checked) drawZoneVisual(kp3, baseAngleDeg, 'rgba(255,255,0,');
+            }
+
+            // Bepaal de gewichten
+            let weights = [];
+            let weightSum = 0;
+            const sigma1 = 0.12; 
+            
+            for (let i = 0; i < SEGMENTS; i++) {
+                let pos = i / (SEGMENTS - 1);
+                let w = Math.exp(-Math.pow(pos - kp1, 2) / (2 * sigma1 * sigma1));
+                
+                if (cbKp2.checked) {
+                    let s2 = Math.max(0.02, kp2.w / 1.5);
+                    w += Math.exp(-Math.pow(pos - kp2.c, 2) / (2 * s2 * s2));
+                }
+                if (cbKp3.checked) {
+                    let s3 = Math.max(0.02, kp3.w / 1.5);
+                    w += Math.exp(-Math.pow(pos - kp3.c, 2) / (2 * s3 * s3));
+                }
+                weights.push(w);
+                weightSum += w;
+            }
+
+            let currentAngle = baseAngleDeg;
+            let curX = CENTER_X;
+            let curY = CENTER_Y;
+            let segLen = ROD_LENGTH / SEGMENTS;
+            let breakOccurred = false;
+
+            // Detect every crossed physics step, so fast slider movement cannot skip a break.
+            const motionBreak = movingForward && !brokenState
+                ? findBreakDuringForwardMotion(previousSwingT, t, speed, weights, weightSum)
+                : null;
+            if (motionBreak && !brokenState) {
+                const breakAngle = 240 - (motionBreak.t * 240);
+                let breakX = CENTER_X;
+                let breakY = CENTER_Y;
+                let angle = breakAngle;
+                for (let i = 0; i < motionBreak.breakIndex; i++) {
+                    angle += (weights[i] / weightSum) * (precalculatedTips[Math.round(motionBreak.t * 1000)] || 0);
+                    breakX += segLen * Math.cos(deg2rad(angle));
+                    breakY += segLen * Math.sin(deg2rad(angle));
+                }
+                brokenState = {
+                    x: breakX,
+                    y: breakY,
+                    angleOffset: angle - breakAngle + 40,
+                    length: ROD_LENGTH - (motionBreak.breakIndex * segLen),
+                    breakIndex: motionBreak.breakIndex
+                };
+                breakTriggerT = motionBreak.t;
+            }
+            
+            for (let i = 0; i < SEGMENTS; i++) {
+                if (brokenState && i >= brokenState.breakIndex) break;
+
+                let wNorm = weights[i] / weightSum;
+                let localBend = (wNorm * totalBend);
+                currentAngle += localBend; 
+                
+                // Convert the distributed bend into the same local-angle scale
+                // used by the break detector and the break-angle sliders.
+                let localCurvature = Math.abs(localBend * SEGMENTS * getAdvancedNumber('angleScale'));
+
+                let nextX = curX + segLen * Math.cos(deg2rad(currentAngle));
+                let nextY = curY + segLen * Math.sin(deg2rad(currentAngle));
+                
+                if (!cbNeverBreak.checked && getSwingAngle(t) >= 150 &&
+                    localCurvature > getBreakLimit(flex) && i > SEGMENTS * 0.1) {
+                    if (!brokenState) {
+                        brokenState = {
+                            x: curX,
+                            y: curY,
+                            // Preserve the snap angle while matching the clamped part's rotation.
+                            angleOffset: currentAngle - baseAngleDeg + 40,
+                            length: ROD_LENGTH - (i * segLen),
+                            breakIndex: i
+                        };
+                        breakTriggerT = t;
+                    }
+                    breakOccurred = true;
+                    break;
+                }
+
+                // Kleur afhankelijk van lokaal buig-gevaar
+                let baseIntensity = Math.min(1, Math.abs(totalBend) / 50) * 0.4;
+                let peakIntensity = Math.min(1, localCurvature / getBreakLimit(flex)); 
+                let finalIntensity = Math.max(baseIntensity, peakIntensity);
+                let hue = 120 - (finalIntensity * 120);
+                
+                ctx.beginPath();
+                ctx.moveTo(curX, curY);
+                ctx.lineTo(nextX, nextY);
+                ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+                ctx.lineWidth = 8;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                curX = nextX;
+                curY = nextY;
+            }
+
+            // Fall is driven by forward swing progress, not rendering-frame speed.
+            if (brokenState) {
+                const fall = Math.min(
+                    FALL_DISTANCE_PER_SWING,
+                    Math.max(0, (t - breakTriggerT) * FALL_DISTANCE_PER_SWING / (1 - breakTriggerT))
+                );
+                // The break point remains attached to the rotating clamped section.
+                // `curX` and `curY` are the current end of that upper section.
+                const fallX = curX;
+                const fallY = curY + fall;
+                // The detached piece keeps rotating at the same global speed.
+                const detachedAngle = baseAngleDeg + brokenState.angleOffset;
+                const endX = fallX + brokenState.length * Math.cos(deg2rad(detachedAngle));
+                const endY = fallY + brokenState.length * Math.sin(deg2rad(detachedAngle));
+
+                ctx.beginPath();
+                ctx.moveTo(fallX, fallY);
+                ctx.lineTo(endX, endY);
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 8;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                ctx.fillStyle = "#ff0000";
+                ctx.font = `bold ${Math.max(12, 22 / zoom)}px Arial`;
+            }
+
+            // Scharnier
+            ctx.beginPath();
+            ctx.arc(CENTER_X, CENTER_Y, 12, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+
+            // Teken interactieve nodes alleen als hulplijnen aanstaan
+            if (showHelpers) {
+                drawKpNode(kp1, baseAngleDeg, '#00d2ff', dragging === 'kp1', 'circle');
+                
+                if (cbKp2.checked) {
+                    drawKpNode(kp2.c, baseAngleDeg, '#ff00d2', dragging === 'kp2_c', 'circle');
+                    drawKpNode(kp2.c - kp2.w, baseAngleDeg, '#ff00d2', dragging === 'kp2_t', 'square');
+                    drawKpNode(kp2.c + kp2.w, baseAngleDeg, '#ff00d2', dragging === 'kp2_b', 'square');
+                }
+                if (cbKp3.checked) {
+                    drawKpNode(kp3.c, baseAngleDeg, '#ffff00', dragging === 'kp3_c', 'circle');
+                    drawKpNode(kp3.c - kp3.w, baseAngleDeg, '#ffff00', dragging === 'kp3_t', 'square');
+                    drawKpNode(kp3.c + kp3.w, baseAngleDeg, '#ffff00', dragging === 'kp3_b', 'square');
+                }
+            }
+        }
+
+        function drawPuck(t, speed) {
+            const rotation = getSwingAngle(t);
+            const progress = Math.max(0, Math.min(1, (rotation - 150) / 50));
+            if (progress <= 0) return;
+
+            const impact = getAdvancedNumber('impactStrength') *
+                Math.pow(Math.max(0, speed) / 200, getAdvancedNumber('speedCurve'));
+            const puckX = CENTER_X + (progress * impact * 160);
+            const puckY = CENTER_Y + ROD_LENGTH * 0.86;
+            const radius = 12;
+
+            ctx.beginPath();
+            ctx.arc(puckX, puckY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#d7d7d7';
+            ctx.fill();
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#222';
+            ctx.font = `${Math.max(10, 12 / zoom)}px Arial`;
+            ctx.fillText('Puck', puckX - 15, puckY + 28);
+        }
+
+        function drawOpposingForces(angleDeg, t) {
+            const forceData = getForceData(t);
+            // The force directions are horizontal in screen space: the clamp is
+            // pulled left and the glove position is pulled right.
+            const directionX = 1;
+            const directionY = 0;
+            const arrowLength = 28 + forceData.force * 5;
+            const forceSize = 3 + forceData.force * 1.5;
+
+            const clampX = CENTER_X + forceData.clampPosition * ROD_LENGTH * Math.cos(deg2rad(angleDeg));
+            const clampY = CENTER_Y + forceData.clampPosition * ROD_LENGTH * Math.sin(deg2rad(angleDeg));
+            const gloveX = CENTER_X + kp1 * ROD_LENGTH * Math.cos(deg2rad(angleDeg));
+            const gloveY = CENTER_Y + kp1 * ROD_LENGTH * Math.sin(deg2rad(angleDeg));
+
+            function arrow(x, y, dx, dy, color) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + dx * arrowLength, y + dy * arrowLength);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = forceSize;
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x + dx * arrowLength, y + dy * arrowLength);
+                ctx.lineTo(x + dx * (arrowLength - 9) - dy * 5, y + dy * (arrowLength - 9) + dx * 5);
+                ctx.lineTo(x + dx * (arrowLength - 9) + dy * 5, y + dy * (arrowLength - 9) - dx * 5);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+
+            // Opposing forces are perpendicular to the rod and therefore create torque.
+            arrow(clampX, clampY, -directionX, -directionY, '#ff7043');
+            arrow(gloveX, gloveY, directionX, directionY, '#00e5ff');
+
+            ctx.fillStyle = '#ff7043';
+            ctx.font = `${Math.max(10, 13 / zoom)}px Arial`;
+            ctx.fillText('Clamp force', clampX + 8, clampY - 8);
+            ctx.fillStyle = '#00e5ff';
+            ctx.fillText('Glove force', gloveX + 8, gloveY - 8);
+        }
+
+        function drawZoneVisual(zone, angleDeg, colorPrefix) {
+            let startPos = zone.c - zone.w;
+            let endPos = zone.c + zone.w;
+            
+            let sx = CENTER_X + (startPos * ROD_LENGTH) * Math.cos(deg2rad(angleDeg));
+            let sy = CENTER_Y + (startPos * ROD_LENGTH) * Math.sin(deg2rad(angleDeg));
+            let ex = CENTER_X + (endPos * ROD_LENGTH) * Math.cos(deg2rad(angleDeg));
+            let ey = CENTER_Y + (endPos * ROD_LENGTH) * Math.sin(deg2rad(angleDeg));
+            
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(ex, ey);
+            ctx.strokeStyle = colorPrefix + '0.35)';
+            ctx.lineWidth = 20; 
+            ctx.lineCap = 'butt';
+            ctx.stroke();
+        }
+
+        function drawKpNode(val, angleDeg, color, isDragging, shape) {
+            let px = CENTER_X + (val * ROD_LENGTH) * Math.cos(deg2rad(angleDeg));
+            let py = CENTER_Y + (val * ROD_LENGTH) * Math.sin(deg2rad(angleDeg));
+            
+            ctx.beginPath();
+            ctx.fillStyle = color;
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2 / zoom; // Hou de randen mooi dun bij ver inzoomen
+            
+            let size = isDragging ? 9 : 7;
+            // Zorg dat de elementen schaalbaar maar klikbaar blijven
+            size = size / (zoom > 1 ? Math.sqrt(zoom) : zoom);
+            
+            if (shape === 'circle') {
+                ctx.arc(px, py, size * 1.5, 0, Math.PI * 2);
+            } else {
+                ctx.rect(px - size, py - size, size*2, size*2);
+            }
+            
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        // --- Interactie Logica (aangepast voor Camera Pan/Zoom) ---
+        function getRawPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        function getWorldPos(raw) {
+            return {
+                x: (raw.x - panX) / zoom,
+                y: (raw.y - panY) / zoom
+            };
+        }
+
+        function checkHit(worldPos, val, baseAngleDeg) {
+            if (!cbShowHelpers.checked) return false; // Kan niet klikken als ze onzichtbaar zijn
+            
+            let px = CENTER_X + (val * ROD_LENGTH) * Math.cos(deg2rad(baseAngleDeg));
+            let py = CENTER_Y + (val * ROD_LENGTH) * Math.sin(deg2rad(baseAngleDeg));
+            // Touch radius is 25 in "schermpixels", dus we delen door zoom voor de world hit area
+            return Math.hypot(worldPos.x - px, worldPos.y - py) < (25 / zoom); 
+        }
+
+        function handlePointerDown(e) {
+            const raw = getRawPos(e);
+            const world = getWorldPos(raw);
+            
+            let t = getT();
+            let baseAngleDeg = 240 - (t * 240);
+            
+            dragging = null;
+            if (checkHit(world, kp1, baseAngleDeg)) dragging = 'kp1';
+            
+            if (!dragging && cbKp3.checked) {
+                if (checkHit(world, kp3.c, baseAngleDeg)) dragging = 'kp3_c';
+                else if (checkHit(world, kp3.c - kp3.w, baseAngleDeg)) dragging = 'kp3_t';
+                else if (checkHit(world, kp3.c + kp3.w, baseAngleDeg)) dragging = 'kp3_b';
+            }
+            if (!dragging && cbKp2.checked) {
+                if (checkHit(world, kp2.c, baseAngleDeg)) dragging = 'kp2_c';
+                else if (checkHit(world, kp2.c - kp2.w, baseAngleDeg)) dragging = 'kp2_t';
+                else if (checkHit(world, kp2.c + kp2.w, baseAngleDeg)) dragging = 'kp2_b';
+            }
+
+            if (!dragging) {
+                // We slepen op de achtergrond -> PAN modus
+                dragging = 'pan';
+                lastPanPos = raw;
+            } else {
+                e.preventDefault();
+                tooltip.style.display = 'block';
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!dragging) return;
+            e.preventDefault();
+            
+            const raw = getRawPos(e);
+            
+            // Panning van de camera
+            if (dragging === 'pan') {
+                panX += (raw.x - lastPanPos.x);
+                panY += (raw.y - lastPanPos.y);
+                lastPanPos = raw;
+                draw();
+                return;
+            }
+            
+            // Verplaatsen van nodes
+            const world = getWorldPos(raw);
+            let t = getT();
+            let baseAngleDeg = 240 - (t * 240);
+            
+            let vX = Math.cos(deg2rad(baseAngleDeg));
+            let vY = Math.sin(deg2rad(baseAngleDeg));
+            let dotProduct = ((world.x - CENTER_X) * vX + (world.y - CENTER_Y) * vY) / ROD_LENGTH;
+            let newPos = Math.max(0.02, Math.min(0.98, dotProduct));
+
+            // Horizontale muisbeweging over het pure beeldscherm -> Flex (Los van zoom!)
+            let horizontalPercent = Math.max(0, Math.min(1, raw.x / canvas.width));
+            flex = 125 - (horizontalPercent * 105);
+
+            let ttName = "";
+
+            if (dragging === 'kp1') {
+                kp1 = newPos;
+                ttName = getKpName(1, kp1);
+            } 
+            else if (dragging.startsWith('kp2')) {
+                if (dragging === 'kp2_c') {
+                    kp2.c = Math.max(kp2.w + 0.02, Math.min(0.98 - kp2.w, newPos));
+                } else {
+                    let w = Math.abs(newPos - kp2.c);
+                    kp2.w = Math.max(0.03, Math.min(w, kp2.c - 0.02, 0.98 - kp2.c));
+                }
+                ttName = getKpName(2, kp2.c);
+            }
+            else if (dragging.startsWith('kp3')) {
+                if (dragging === 'kp3_c') {
+                    kp3.c = Math.max(kp3.w + 0.02, Math.min(0.98 - kp3.w, newPos));
+                } else {
+                    let w = Math.abs(newPos - kp3.c);
+                    kp3.w = Math.max(0.03, Math.min(w, kp3.c - 0.02, 0.98 - kp3.c));
+                }
+                ttName = getKpName(3, kp3.c);
+            }
+            
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            tooltip.style.left = (clientX + 15) + 'px';
+            tooltip.style.top = (clientY - 30) + 'px';
+            tooltip.innerHTML = `${ttName}<br>Flex: ${Math.round(flex)}`;
+            
+            precalculatePhysics();
+            draw();
+        }
+
+        function handlePointerUp() {
+            dragging = null;
+            tooltip.style.display = 'none';
+        }
+
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+        
+        canvas.addEventListener('touchstart', handlePointerDown, {passive: false});
+        canvas.addEventListener('touchmove', handlePointerMove, {passive: false});
+        window.addEventListener('touchend', handlePointerUp);
+
+        timeSlider.addEventListener('input', draw);
+        speedSlider.addEventListener('input', () => { precalculatePhysics(); draw(); });
+        cbKp2.addEventListener('change', draw);
+        cbKp3.addEventListener('change', draw);
+        cbShowHelpers.addEventListener('change', draw);
+        cbNeverBreak.addEventListener('change', () => {
+            if (cbNeverBreak.checked) {
+                brokenState = null;
+                breakTriggerT = null;
+            }
+            draw();
+        });
+        unitToggle.addEventListener('click', () => { useMph = !useMph; draw(); });
+
+        advancedToggle.addEventListener('click', () => {
+            advancedSettings.classList.toggle('open');
+            advancedToggle.textContent = advancedSettings.classList.contains('open')
+                ? '⚙ Hide advanced settings'
+                : '⚙ Advanced settings';
+        });
+
+        Object.values(advancedControls).forEach(control => {
+            control.addEventListener('input', () => {
+                // Keep the two break limits logically ordered.
+                if (advancedControls.breakHigh.value > advancedControls.breakLow.value) {
+                    advancedControls.breakHigh.value = advancedControls.breakLow.value;
+                }
+                updateAdvancedValueLabels();
+                precalculatePhysics();
+                draw();
+            });
+        });
+
+        updateAdvancedValueLabels();
+        precalculatePhysics();
+        
+        // Start initieel direct 1.3x ingezoomd, dat vult het scherm prachtig op
+        doZoom(1.3);
+
+    </script>
+</body>
+</html>
