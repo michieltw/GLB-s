@@ -501,7 +501,7 @@
             const clampedFlex = Math.max(20, Math.min(125, flex));
             const flexProgress = (clampedFlex - 20) / 105;
             // A real hockey stick has a natural frequency of ~25Hz.
-            const stiffnessBase = 5000 + (1 - flexProgress) * 15000 * getAdvancedNumber('resistance');
+            const stiffnessBase = 5000 + flexProgress * 15000 * getAdvancedNumber('resistance');
             const floorFrictionCoef = getAdvancedNumber('floorFriction') * 0.5;
             const impactCoef = getAdvancedNumber('impactStrength') * 2.0;
             const recoilCoef = getAdvancedNumber('recoilStrength');
