@@ -500,8 +500,8 @@
             const speed = parseFloat(speedSlider.value);
             const clampedFlex = Math.max(20, Math.min(125, flex));
             const flexProgress = (clampedFlex - 20) / 105;
-            // A real hockey stick has a natural frequency of ~25Hz. We drastically increase stiffness.
-            const stiffnessBase = 50000 + (1 - flexProgress) * 150000 * getAdvancedNumber('resistance');
+            // A real hockey stick has a natural frequency of ~25Hz.
+            const stiffnessBase = 5000 + (1 - flexProgress) * 15000 * getAdvancedNumber('resistance');
             const floorFrictionCoef = getAdvancedNumber('floorFriction') * 0.5;
             const impactCoef = getAdvancedNumber('impactStrength') * 2.0;
             const recoilCoef = getAdvancedNumber('recoilStrength');
@@ -570,12 +570,12 @@
                 if (angularPos <= 140 && angularPos > 130) {
                     // Floor drag starts at 140°
                     const floorProgress = (140 - angularPos) / 10;
-                    externalResistanceTorque = floorFrictionCoef * 1500000 * floorProgress * speedFactor;
+                    externalResistanceTorque = floorFrictionCoef * 25000 * floorProgress * speedFactor;
                 } else if (angularPos <= 130 && angularPos > 90) {
                     // Puck impact phase
                     const impactProgress = (130 - angularPos) / 40;
                     // Resistance spikes initially and tapers
-                    externalResistanceTorque = impactCoef * 5000000 * (1.0 - impactProgress) * speedFactor;
+                    externalResistanceTorque = impactCoef * 100000 * (1.0 - impactProgress) * speedFactor;
                 }
 
                 // 3. Update Bends
@@ -1198,8 +1198,8 @@
 
         timeSlider.addEventListener('input', draw);
         speedSlider.addEventListener('input', () => { precalculatePhysics(); draw(); });
-        cbKp2.addEventListener('change', draw);
-        cbKp3.addEventListener('change', draw);
+        cbKp2.addEventListener('change', () => { precalculatePhysics(); draw(); });
+        cbKp3.addEventListener('change', () => { precalculatePhysics(); draw(); });
         cbShowHelpers.addEventListener('change', draw);
         cbNeverBreak.addEventListener('change', () => {
             if (cbNeverBreak.checked) {
