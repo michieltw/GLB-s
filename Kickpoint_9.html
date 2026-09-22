@@ -18,7 +18,7 @@
             overflow: hidden;
             touch-action: none;
         }
-        
+
         #canvas-container {
             width: 100%;
             flex-grow: 1;
@@ -28,7 +28,7 @@
             position: relative;
             cursor: grab;
         }
-        
+
         #canvas-container:active {
             cursor: grabbing;
         }
@@ -68,7 +68,7 @@
 
         label { font-weight: bold; font-size: 14px; color: #ddd; }
         .val-display { color: #00d2ff; font-weight: bold; font-family: monospace; font-size: 16px;}
-        
+
         .speed-category { font-size: 12px; color: #aaa; font-style: italic; }
 
         input[type="range"] {
@@ -190,7 +190,7 @@
         <div class="control-group">
             <div class="header-row">
                 <label style="display:flex; align-items:center; gap: 10px;">
-                    Shot Speed: 
+                    Shot Speed:
                     <button class="info-btn" onclick="alert('Record Info:\n\nKHL: 183,7 km/h (Bauer Supreme, 112 Flex)\nNHL: 175,1 km/h (Warrior Dynasty, 150 Flex)')">ℹ Info</button>
                     <button class="unit-btn" id="unitToggle">KM/H</button>
                 </label>
@@ -291,7 +291,7 @@
         const canvas = document.getElementById('simCanvas');
         const ctx = canvas.getContext('2d');
         const tooltip = document.getElementById('dragTooltip');
-        
+
         const timeSlider = document.getElementById('timeSlider');
         const speedSlider = document.getElementById('speedSlider');
         const unitToggle = document.getElementById('unitToggle');
@@ -354,8 +354,8 @@
         // Basis instellingen (worden live geschaald door de Pan/Zoom logic)
         const ROD_LENGTH = 380;
         const CENTER_X = canvas.width / 2;
-        const CENTER_Y = 40; 
-        const SEGMENTS = 50; 
+        const CENTER_Y = 40;
+        const SEGMENTS = 50;
 
         // Maximum local bend before snapping. Softer sticks bend farther before breaking.
         function getBreakLimit(currentFlex) {
@@ -366,12 +366,12 @@
         }
 
         // State & Pan/Zoom transformaties
-        let kp1 = 0.5; 
-        let kp2 = { c: 0.7, w: 0.1 }; 
+        let kp1 = 0.5;
+        let kp2 = { c: 0.7, w: 0.1 };
         let kp3 = { c: 0.85, w: 0.1 };
-        let flex = 75; 
+        let flex = 75;
         let useMph = false;
-        
+
         // Panning en Zooming Variabelen
         let zoom = 1.0;
         let panX = 0;
@@ -380,6 +380,7 @@
         let lastPanPos = {x: 0, y: 0};
 
         let precalculatedTips = [];
+        let precalculatedPhysicsData = []; // Store full physics state at each step
         let brokenState = null;
         let lastSwingT = null;
         let breakTriggerT = null;
@@ -393,7 +394,7 @@
             panX = centerX - (centerX - panX) * factor;
             panY = centerY - (centerY - panY) * factor;
             zoom *= factor;
-            
+
             // Limit zoom
             zoom = Math.max(0.4, Math.min(zoom, 4.0));
             draw();
@@ -494,21 +495,137 @@
 
         function precalculatePhysics() {
             precalculatedTips = [];
-            const speed = parseFloat(speedSlider.value);
-            
-            for (let i = 0; i <= 1000; i++) {
-                const t = i / 1000;
-                const baseAngle = 240 - (t * 240);
+            precalculatedPhysicsData = [];
 
-                // Do not clamp the tip angle against the previous sample: that
-                // made higher speeds appear to stop increasing the bend.
+            const speed = parseFloat(speedSlider.value);
+            const clampedFlex = Math.max(20, Math.min(125, flex));
+            const flexProgress = (clampedFlex - 20) / 105;
+            // A real hockey stick has a natural frequency of ~25Hz. We drastically increase stiffness.
+            const stiffnessBase = 50000 + (1 - flexProgress) * 150000 * getAdvancedNumber('resistance');
+            const floorFrictionCoef = getAdvancedNumber('floorFriction') * 0.5;
+            const impactCoef = getAdvancedNumber('impactStrength') * 2.0;
+            const recoilCoef = getAdvancedNumber('recoilStrength');
+            const speedFactor = Math.pow(Math.max(0, speed) / 200, getAdvancedNumber('speedCurve'));
+
+            // Stick rotational inertia
+            const I_shaft = 100.0;
+            const dt = 1.0 / 1000.0;
+
+            // State
+            let angularPos = 240; // Starts at 240 deg
+            let angularVel = 0;
+
+            // Stick bends (angles in degrees relative to the unbent stick)
+            let stickBendB = 0;
+            let bendVelB = 0;
+            let stickBendC = 0;
+            let bendVelC = 0;
+
+            // Figure out kickpoints. Axis B is primary (lowest), Axis C is secondary
+            let kpList = [];
+            if (cbKp2 && cbKp2.checked) kpList.push(kp2.c);
+            if (cbKp3 && cbKp3.checked) kpList.push(kp3.c);
+            kpList.sort((a,b) => b-a); // highest value (closest to blade) first
+
+            let axisB_pos = kpList.length > 0 ? kpList[0] : kp1; // Defaults to kp1 if no zones checked
+            let axisC_pos = kpList.length > 1 ? kpList[1] : kp1;
+
+            // Weight stiffness by how much is clamped above it and what zone it is
+            // Lower zones flex more easily
+            let stiffnessB = stiffnessBase * (1.0 - axisB_pos * 0.5);
+            let stiffnessC = stiffnessBase * (1.0 - axisC_pos * 0.5) * 1.5; // Secondary is stiffer
+
+            for (let i = 0; i <= 1000; i++) {
+                const t = i / 1000.0;
+
+                // Keep pushing old data array for backwards compatibility just in case
                 precalculatedTips.push(getRawBend(t, speed, flex));
+
+                // Swing force profile drives the shaft rotation
+                // A full swing is roughly 0.25 seconds. If dt = 1/1000, we need to scale up dt effectively or increase torque
+                // since t goes from 0 to 1, we map that to the swing duration.
+                // Let's make the 1000 steps cover a 0.5s real-world swing. So true_dt = 0.5 / 1000
+                const true_dt = 0.5 / 1000.0;
+
+                // Need a massive torque to swing a stick 240 degrees in 0.25 seconds.
+                // Let's use proportional control to force angularPos to match the slider `t`
+                const targetAngPos = 240 - (t * 240);
+
+                // Swing force profile drives the shaft rotation
+                // Rather than pure torque which doesn't reach the puck, let's tie angularPos to T, but
+                // calculate velocity for the physics math
+                const prevAngPos = angularPos;
+                angularPos = targetAngPos;
+                angularVel = (angularPos - prevAngPos) / true_dt;
+
+                // Stop at 0 degrees
+                if (angularPos < 0) {
+                    angularPos = 0;
+                    angularVel = 0;
+                }
+
+                // 2. External Forces (Ice and Puck) applied at blade
+                let externalResistanceTorque = 0;
+
+                if (angularPos <= 140 && angularPos > 130) {
+                    // Floor drag starts at 140°
+                    const floorProgress = (140 - angularPos) / 10;
+                    externalResistanceTorque = floorFrictionCoef * 1500000 * floorProgress * speedFactor;
+                } else if (angularPos <= 130 && angularPos > 90) {
+                    // Puck impact phase
+                    const impactProgress = (130 - angularPos) / 40;
+                    // Resistance spikes initially and tapers
+                    externalResistanceTorque = impactCoef * 5000000 * (1.0 - impactProgress) * speedFactor;
+                }
+
+                // 3. Update Bends
+                // The resistance torque bends the stick at Axis B and Axis C.
+                // Spring force tries to unbend it. Damping reduces oscillation.
+                const damping = 0.8;
+
+                // Axis B physics
+                const springForceB = -stickBendB * stiffnessB;
+                const accelBendB = (externalResistanceTorque + springForceB) / (I_shaft * 0.2) - (bendVelB * damping);
+                bendVelB += accelBendB * true_dt;
+                stickBendB += bendVelB * true_dt;
+
+                // Axis C physics (only active if two zones)
+                let accelBendC = 0;
+                if (kpList.length > 1) {
+                    const springForceC = -stickBendC * stiffnessC;
+                    accelBendC = ((externalResistanceTorque * 0.6) + springForceC) / (I_shaft * 0.2) - (bendVelC * damping);
+                    bendVelC += accelBendC * true_dt;
+                    stickBendC += bendVelC * true_dt;
+                }
+
+                // If stick passes puck (angularPos < 90), apply recoil
+                if (angularPos <= 90) {
+                    bendVelB -= stickBendB * 2.0 * recoilCoef * true_dt;
+                    bendVelC -= stickBendC * 2.0 * recoilCoef * true_dt;
+                }
+
+                // Clamp bends (sticks can't bend backwards during swing significantly)
+                if (stickBendB < -10) { stickBendB = -10; bendVelB = 0; }
+                if (stickBendC < -10) { stickBendC = -10; bendVelC = 0; }
+
+                precalculatedPhysicsData.push({
+                    t: t,
+                    angularPos: angularPos,
+                    angularVel: angularVel,
+                    stickBendB: stickBendB,
+                    bendVelB: bendVelB,
+                    axisB_pos: axisB_pos,
+                    stickBendC: stickBendC,
+                    bendVelC: bendVelC,
+                    axisC_pos: axisC_pos,
+                    hasAxisC: kpList.length > 1
+                });
             }
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
+
             let t = getT();
             let speed = parseFloat(speedSlider.value);
             const previousSwingT = lastSwingT;
@@ -521,7 +638,7 @@
                 breakTriggerT = null;
             }
             lastSwingT = t;
-            
+
             valRot.innerText = Math.round(getSwingAngle(t)) + "°";
             valSpeed.innerText = useMph ? Math.round(speed * 0.621371) + " mph" : speed + " km/h";
             speedCat.innerText = getSpeedCategory(speed);
@@ -530,9 +647,9 @@
             ctx.save();
             ctx.translate(panX, panY);
             ctx.scale(zoom, zoom);
-            
+
             drawStick(t, previousSwingT, movingForward, speed);
-            
+
             // Camera uit
             ctx.restore();
         }
@@ -587,7 +704,10 @@
             const lastStep = Math.min(1000, Math.ceil(toT * 1000));
             for (let step = firstStep; step <= lastStep; step++) {
                 const candidateT = step / 1000;
-                const bend = precalculatedTips[step] ?? getRawBend(candidateT, speed, flex);
+
+                const physState = precalculatedPhysicsData[step];
+                const bend = physState ? (physState.stickBendB + physState.stickBendC) : (precalculatedTips[step] ?? getRawBend(candidateT, speed, flex));
+
                 const candidateRotation = getSwingAngle(candidateT);
                 const breakIndex = findBreakIndex(bend, weights, weightSum, candidateRotation);
                 if (breakIndex >= 0) return { t: candidateT, breakIndex };
@@ -596,10 +716,14 @@
         }
 
         function drawStick(t, previousSwingT = null, movingForward = false, speed = parseFloat(speedSlider.value)) {
-            const baseAngleDeg = 240 - (t * 240);
-            
             let lookupIndex = Math.min(1000, Math.max(0, Math.round(t * 1000)));
-            const totalBend = precalculatedTips[lookupIndex] || 0;
+            const physState = precalculatedPhysicsData[lookupIndex] || {
+                angularPos: 240 - (t * 240),
+                stickBendB: 0, stickBendC: 0
+            };
+
+            const baseAngleDeg = physState.angularPos;
+            const totalBend = physState.stickBendB + physState.stickBendC;
             const showHelpers = cbShowHelpers.checked;
 
             // The puck is struck at the lower tip after the 150° impact phase.
@@ -607,7 +731,7 @@
             drawPuck(t, speed);
 
             if (showHelpers) {
-                drawOpposingForces(baseAngleDeg, t);
+                drawVelocityVectors(t);
 
                 // Ghost Line
                 ctx.beginPath();
@@ -629,12 +753,12 @@
             // Bepaal de gewichten
             let weights = [];
             let weightSum = 0;
-            const sigma1 = 0.12; 
-            
+            const sigma1 = 0.12;
+
             for (let i = 0; i < SEGMENTS; i++) {
                 let pos = i / (SEGMENTS - 1);
                 let w = Math.exp(-Math.pow(pos - kp1, 2) / (2 * sigma1 * sigma1));
-                
+
                 if (cbKp2.checked) {
                     let s2 = Math.max(0.02, kp2.w / 1.5);
                     w += Math.exp(-Math.pow(pos - kp2.c, 2) / (2 * s2 * s2));
@@ -662,8 +786,12 @@
                 let breakX = CENTER_X;
                 let breakY = CENTER_Y;
                 let angle = breakAngle;
+
+                const breakPhysState = precalculatedPhysicsData[Math.round(motionBreak.t * 1000)];
+                const breakTotalBend = breakPhysState ? (breakPhysState.stickBendB + breakPhysState.stickBendC) : 0;
+
                 for (let i = 0; i < motionBreak.breakIndex; i++) {
-                    angle += (weights[i] / weightSum) * (precalculatedTips[Math.round(motionBreak.t * 1000)] || 0);
+                    angle += (weights[i] / weightSum) * breakTotalBend;
                     breakX += segLen * Math.cos(deg2rad(angle));
                     breakY += segLen * Math.sin(deg2rad(angle));
                 }
@@ -676,21 +804,21 @@
                 };
                 breakTriggerT = motionBreak.t;
             }
-            
+
             for (let i = 0; i < SEGMENTS; i++) {
                 if (brokenState && i >= brokenState.breakIndex) break;
 
                 let wNorm = weights[i] / weightSum;
                 let localBend = (wNorm * totalBend);
-                currentAngle += localBend; 
-                
+                currentAngle += localBend;
+
                 // Convert the distributed bend into the same local-angle scale
                 // used by the break detector and the break-angle sliders.
                 let localCurvature = Math.abs(localBend * SEGMENTS * getAdvancedNumber('angleScale'));
 
                 let nextX = curX + segLen * Math.cos(deg2rad(currentAngle));
                 let nextY = curY + segLen * Math.sin(deg2rad(currentAngle));
-                
+
                 if (!cbNeverBreak.checked && getSwingAngle(t) >= 150 &&
                     localCurvature > getBreakLimit(flex) && i > SEGMENTS * 0.1) {
                     if (!brokenState) {
@@ -710,10 +838,10 @@
 
                 // Kleur afhankelijk van lokaal buig-gevaar
                 let baseIntensity = Math.min(1, Math.abs(totalBend) / 50) * 0.4;
-                let peakIntensity = Math.min(1, localCurvature / getBreakLimit(flex)); 
+                let peakIntensity = Math.min(1, localCurvature / getBreakLimit(flex));
                 let finalIntensity = Math.max(baseIntensity, peakIntensity);
                 let hue = 120 - (finalIntensity * 120);
-                
+
                 ctx.beginPath();
                 ctx.moveTo(curX, curY);
                 ctx.lineTo(nextX, nextY);
@@ -762,7 +890,7 @@
             // Teken interactieve nodes alleen als hulplijnen aanstaan
             if (showHelpers) {
                 drawKpNode(kp1, baseAngleDeg, '#00d2ff', dragging === 'kp1', 'circle');
-                
+
                 if (cbKp2.checked) {
                     drawKpNode(kp2.c, baseAngleDeg, '#ff00d2', dragging === 'kp2_c', 'circle');
                     drawKpNode(kp2.c - kp2.w, baseAngleDeg, '#ff00d2', dragging === 'kp2_t', 'square');
@@ -799,61 +927,113 @@
             ctx.fillText('Puck', puckX - 15, puckY + 28);
         }
 
-        function drawOpposingForces(angleDeg, t) {
-            const forceData = getForceData(t);
-            // The force directions are horizontal in screen space: the clamp is
-            // pulled left and the glove position is pulled right.
-            const directionX = 1;
-            const directionY = 0;
-            const arrowLength = 28 + forceData.force * 5;
-            const forceSize = 3 + forceData.force * 1.5;
+        function drawVelocityVectors(t) {
+            let lookupIndex = Math.min(1000, Math.max(0, Math.round(t * 1000)));
+            const physState = precalculatedPhysicsData[lookupIndex];
+            if (!physState) return;
 
-            const clampX = CENTER_X + forceData.clampPosition * ROD_LENGTH * Math.cos(deg2rad(angleDeg));
-            const clampY = CENTER_Y + forceData.clampPosition * ROD_LENGTH * Math.sin(deg2rad(angleDeg));
-            const gloveX = CENTER_X + kp1 * ROD_LENGTH * Math.cos(deg2rad(angleDeg));
-            const gloveY = CENTER_Y + kp1 * ROD_LENGTH * Math.sin(deg2rad(angleDeg));
+            // Only show vectors when there's actually speed or bending happening
+            if (Math.abs(physState.angularVel) < 0.1 && Math.abs(physState.bendVelB) < 0.1 && Math.abs(physState.bendVelC) < 0.1) return;
 
-            function arrow(x, y, dx, dy, color) {
+            const angleRad = deg2rad(physState.angularPos);
+
+            // Blade Tip Position (simplified as end of rod without bend for vector origin)
+            const tipX = CENTER_X + ROD_LENGTH * Math.cos(angleRad);
+            const tipY = CENTER_Y + ROD_LENGTH * Math.sin(angleRad);
+
+            // Function to draw arrows
+            function drawArrow(x, y, vx, vy, color, label, offsetLabelX=0, offsetLabelY=0) {
+                const len = Math.hypot(vx, vy);
+                if (len < 5) return; // Don't draw tiny arrows
+
+                // Scale velocity to pixel length for visualization
+                const scale = 0.5;
+                const dx = vx * scale;
+                const dy = vy * scale;
+                const forceSize = 3;
+
                 ctx.beginPath();
                 ctx.moveTo(x, y);
-                ctx.lineTo(x + dx * arrowLength, y + dy * arrowLength);
+                ctx.lineTo(x + dx, y + dy);
                 ctx.strokeStyle = color;
                 ctx.lineWidth = forceSize;
                 ctx.stroke();
+
+                // Arrowhead
+                const nx = dx / len;
+                const ny = dy / len;
                 ctx.beginPath();
-                ctx.moveTo(x + dx * arrowLength, y + dy * arrowLength);
-                ctx.lineTo(x + dx * (arrowLength - 9) - dy * 5, y + dy * (arrowLength - 9) + dx * 5);
-                ctx.lineTo(x + dx * (arrowLength - 9) + dy * 5, y + dy * (arrowLength - 9) - dx * 5);
+                ctx.moveTo(x + dx, y + dy);
+                ctx.lineTo(x + dx - nx * 9 - ny * 5, y + dy - ny * 9 + nx * 5);
+                ctx.lineTo(x + dx - nx * 9 + ny * 5, y + dy - ny * 9 - nx * 5);
                 ctx.closePath();
                 ctx.fillStyle = color;
                 ctx.fill();
+
+                ctx.fillStyle = color;
+                ctx.font = `bold ${Math.max(10, 14 / zoom)}px Arial`;
+                ctx.fillText(label, x + dx + offsetLabelX, y + dy + offsetLabelY);
             }
 
-            // Opposing forces are perpendicular to the rod and therefore create torque.
-            arrow(clampX, clampY, -directionX, -directionY, '#ff7043');
-            arrow(gloveX, gloveY, directionX, directionY, '#00e5ff');
+            // 1. Shaft Swing Velocity (v_a = r_a * w_a)
+            // Velocity is perpendicular to the shaft
+            const ra = ROD_LENGTH;
+            // angularVel is deg/s, convert to rad/s roughly for visualization magnitude
+            const va_mag = physState.angularVel * 0.5;
+            const va_dirX = -Math.sin(angleRad); // Perpendicular to radius
+            const va_dirY = Math.cos(angleRad);
+            drawArrow(tipX, tipY, va_dirX * va_mag, va_dirY * va_mag, '#00e5ff', 'Va (Swing)', 5, 5);
 
-            ctx.fillStyle = '#ff7043';
-            ctx.font = `${Math.max(10, 13 / zoom)}px Arial`;
-            ctx.fillText('Clamp force', clampX + 8, clampY - 8);
-            ctx.fillStyle = '#00e5ff';
-            ctx.fillText('Glove force', gloveX + 8, gloveY - 8);
+            let currentTipX = tipX + (va_dirX * va_mag * 0.5);
+            let currentTipY = tipY + (va_dirY * va_mag * 0.5);
+
+            // 2. Whip Velocity from Axis B (v_b = r_b * w_b)
+            const rb = ROD_LENGTH * (1.0 - physState.axisB_pos);
+            const vb_mag = physState.bendVelB * 2.0; // Scale up for visibility
+            drawArrow(currentTipX, currentTipY, va_dirX * vb_mag, va_dirY * vb_mag, '#ff00d2', 'Vb (Kick 1)', 5, 15);
+
+            currentTipX += (va_dirX * vb_mag * 0.5);
+            currentTipY += (va_dirY * vb_mag * 0.5);
+
+            // 3. Whip Velocity from Axis C (v_c = r_c * w_c)
+            if (physState.hasAxisC) {
+                const rc = ROD_LENGTH * (1.0 - physState.axisC_pos);
+                const vc_mag = physState.bendVelC * 2.0;
+                drawArrow(currentTipX, currentTipY, va_dirX * vc_mag, va_dirY * vc_mag, '#ffff00', 'Vc (Kick 2)', 5, 25);
+            }
+
+            // Draw Axis Labels at their locations
+            function drawAxisLabel(pos, label, color) {
+                const lx = CENTER_X + (pos * ROD_LENGTH) * Math.cos(angleRad);
+                const ly = CENTER_Y + (pos * ROD_LENGTH) * Math.sin(angleRad);
+                ctx.fillStyle = color;
+                ctx.font = `bold ${Math.max(12, 16 / zoom)}px Arial`;
+                ctx.fillText(label, lx - 40, ly - 10);
+            }
+
+            drawAxisLabel(0, 'Axis a', '#00e5ff');
+            drawAxisLabel(physState.axisB_pos, 'Axis b', '#ff00d2');
+            if (physState.hasAxisC) drawAxisLabel(physState.axisC_pos, 'Axis c', '#ffff00');
+        }
+
+        function drawOpposingForces(angleDeg, t) {
+            // Deprecated - replaced by drawVelocityVectors to match blueprint
         }
 
         function drawZoneVisual(zone, angleDeg, colorPrefix) {
             let startPos = zone.c - zone.w;
             let endPos = zone.c + zone.w;
-            
+
             let sx = CENTER_X + (startPos * ROD_LENGTH) * Math.cos(deg2rad(angleDeg));
             let sy = CENTER_Y + (startPos * ROD_LENGTH) * Math.sin(deg2rad(angleDeg));
             let ex = CENTER_X + (endPos * ROD_LENGTH) * Math.cos(deg2rad(angleDeg));
             let ey = CENTER_Y + (endPos * ROD_LENGTH) * Math.sin(deg2rad(angleDeg));
-            
+
             ctx.beginPath();
             ctx.moveTo(sx, sy);
             ctx.lineTo(ex, ey);
             ctx.strokeStyle = colorPrefix + '0.35)';
-            ctx.lineWidth = 20; 
+            ctx.lineWidth = 20;
             ctx.lineCap = 'butt';
             ctx.stroke();
         }
@@ -861,22 +1041,22 @@
         function drawKpNode(val, angleDeg, color, isDragging, shape) {
             let px = CENTER_X + (val * ROD_LENGTH) * Math.cos(deg2rad(angleDeg));
             let py = CENTER_Y + (val * ROD_LENGTH) * Math.sin(deg2rad(angleDeg));
-            
+
             ctx.beginPath();
             ctx.fillStyle = color;
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2 / zoom; // Hou de randen mooi dun bij ver inzoomen
-            
+
             let size = isDragging ? 9 : 7;
             // Zorg dat de elementen schaalbaar maar klikbaar blijven
             size = size / (zoom > 1 ? Math.sqrt(zoom) : zoom);
-            
+
             if (shape === 'circle') {
                 ctx.arc(px, py, size * 1.5, 0, Math.PI * 2);
             } else {
                 ctx.rect(px - size, py - size, size*2, size*2);
             }
-            
+
             ctx.fill();
             ctx.stroke();
         }
@@ -901,23 +1081,23 @@
 
         function checkHit(worldPos, val, baseAngleDeg) {
             if (!cbShowHelpers.checked) return false; // Kan niet klikken als ze onzichtbaar zijn
-            
+
             let px = CENTER_X + (val * ROD_LENGTH) * Math.cos(deg2rad(baseAngleDeg));
             let py = CENTER_Y + (val * ROD_LENGTH) * Math.sin(deg2rad(baseAngleDeg));
             // Touch radius is 25 in "schermpixels", dus we delen door zoom voor de world hit area
-            return Math.hypot(worldPos.x - px, worldPos.y - py) < (25 / zoom); 
+            return Math.hypot(worldPos.x - px, worldPos.y - py) < (25 / zoom);
         }
 
         function handlePointerDown(e) {
             const raw = getRawPos(e);
             const world = getWorldPos(raw);
-            
+
             let t = getT();
             let baseAngleDeg = 240 - (t * 240);
-            
+
             dragging = null;
             if (checkHit(world, kp1, baseAngleDeg)) dragging = 'kp1';
-            
+
             if (!dragging && cbKp3.checked) {
                 if (checkHit(world, kp3.c, baseAngleDeg)) dragging = 'kp3_c';
                 else if (checkHit(world, kp3.c - kp3.w, baseAngleDeg)) dragging = 'kp3_t';
@@ -942,9 +1122,9 @@
         function handlePointerMove(e) {
             if (!dragging) return;
             e.preventDefault();
-            
+
             const raw = getRawPos(e);
-            
+
             // Panning van de camera
             if (dragging === 'pan') {
                 panX += (raw.x - lastPanPos.x);
@@ -953,12 +1133,12 @@
                 draw();
                 return;
             }
-            
+
             // Verplaatsen van nodes
             const world = getWorldPos(raw);
             let t = getT();
             let baseAngleDeg = 240 - (t * 240);
-            
+
             let vX = Math.cos(deg2rad(baseAngleDeg));
             let vY = Math.sin(deg2rad(baseAngleDeg));
             let dotProduct = ((world.x - CENTER_X) * vX + (world.y - CENTER_Y) * vY) / ROD_LENGTH;
@@ -973,7 +1153,7 @@
             if (dragging === 'kp1') {
                 kp1 = newPos;
                 ttName = getKpName(1, kp1);
-            } 
+            }
             else if (dragging.startsWith('kp2')) {
                 if (dragging === 'kp2_c') {
                     kp2.c = Math.max(kp2.w + 0.02, Math.min(0.98 - kp2.w, newPos));
@@ -992,13 +1172,13 @@
                 }
                 ttName = getKpName(3, kp3.c);
             }
-            
+
             let clientX = e.touches ? e.touches[0].clientX : e.clientX;
             let clientY = e.touches ? e.touches[0].clientY : e.clientY;
             tooltip.style.left = (clientX + 15) + 'px';
             tooltip.style.top = (clientY - 30) + 'px';
             tooltip.innerHTML = `${ttName}<br>Flex: ${Math.round(flex)}`;
-            
+
             precalculatePhysics();
             draw();
         }
@@ -1011,7 +1191,7 @@
         canvas.addEventListener('mousedown', handlePointerDown);
         canvas.addEventListener('mousemove', handlePointerMove);
         window.addEventListener('mouseup', handlePointerUp);
-        
+
         canvas.addEventListener('touchstart', handlePointerDown, {passive: false});
         canvas.addEventListener('touchmove', handlePointerMove, {passive: false});
         window.addEventListener('touchend', handlePointerUp);
@@ -1051,7 +1231,7 @@
 
         updateAdvancedValueLabels();
         precalculatePhysics();
-        
+
         // Start initieel direct 1.3x ingezoomd, dat vult het scherm prachtig op
         doZoom(1.3);
 
