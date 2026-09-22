@@ -521,6 +521,11 @@
             let stickBendC = 0;
             let bendVelC = 0;
 
+            // Puck state
+            let puckX = CENTER_X + ROD_LENGTH * Math.cos(deg2rad(130)); // Placed at 130 deg impact mark
+            let puckY = CENTER_Y + ROD_LENGTH * 0.86;
+            let puckVelX = 0;
+
             // Figure out kickpoints. Axis B is primary (lowest), Axis C is secondary
             let kpList = [];
             if (cbKp2 && cbKp2.checked) kpList.push(kp2.c);
@@ -534,6 +539,12 @@
             // Lower zones flex more easily
             let stiffnessB = stiffnessBase * (1.0 - axisB_pos * 0.5);
             let stiffnessC = stiffnessBase * (1.0 - axisC_pos * 0.5) * 1.5; // Secondary is stiffer
+
+            // Dynamic Inertia based on kickpoint length (lower kickpoint = less mass to swing = faster whip)
+            const lenB = (1.0 - axisB_pos);
+            const inertiaB = I_shaft * Math.max(0.05, lenB * lenB);
+            const lenC = (1.0 - axisC_pos);
+            const inertiaC = I_shaft * Math.max(0.05, lenC * lenC);
 
             for (let i = 0; i <= 1000; i++) {
                 const t = i / 1000.0;
@@ -585,7 +596,7 @@
 
                 // Axis B physics
                 const springForceB = -stickBendB * stiffnessB;
-                const accelBendB = (externalResistanceTorque + springForceB) / (I_shaft * 0.2) - (bendVelB * damping);
+                const accelBendB = (externalResistanceTorque + springForceB) / inertiaB - (bendVelB * damping);
                 bendVelB += accelBendB * true_dt;
                 stickBendB += bendVelB * true_dt;
 
@@ -593,7 +604,7 @@
                 let accelBendC = 0;
                 if (kpList.length > 1) {
                     const springForceC = -stickBendC * stiffnessC;
-                    accelBendC = ((externalResistanceTorque * 0.6) + springForceC) / (I_shaft * 0.2) - (bendVelC * damping);
+                    accelBendC = ((externalResistanceTorque * 0.6) + springForceC) / inertiaC - (bendVelC * damping);
                     bendVelC += accelBendC * true_dt;
                     stickBendC += bendVelC * true_dt;
                 }
@@ -608,6 +619,21 @@
                 if (stickBendB < -10) { stickBendB = -10; bendVelB = 0; }
                 if (stickBendC < -10) { stickBendC = -10; bendVelC = 0; }
 
+                // Calculate exact blade tip X position incorporating bends
+                const totalBend = stickBendB + stickBendC;
+                const tipAngleRad = deg2rad(angularPos + totalBend);
+                const bladeX = CENTER_X + ROD_LENGTH * Math.cos(tipAngleRad);
+
+                // Puck collision / pushing logic
+                if (bladeX > puckX && angularPos <= 130) {
+                    // Stick is pushing the puck
+                    puckVelX = (bladeX - puckX) / true_dt; // Transfer speed
+                    puckX = bladeX;
+                } else {
+                    // Coasting free
+                    puckX += puckVelX * true_dt;
+                }
+
                 precalculatedPhysicsData.push({
                     t: t,
                     angularPos: angularPos,
@@ -618,7 +644,9 @@
                     stickBendC: stickBendC,
                     bendVelC: bendVelC,
                     axisC_pos: axisC_pos,
-                    hasAxisC: kpList.length > 1
+                    hasAxisC: kpList.length > 1,
+                    puckX: puckX,
+                    puckY: puckY
                 });
             }
         }
@@ -905,14 +933,15 @@
         }
 
         function drawPuck(t, speed) {
-            const rotation = getSwingAngle(t);
-            const progress = Math.max(0, Math.min(1, (rotation - 150) / 50));
-            if (progress <= 0) return;
+            let lookupIndex = Math.min(1000, Math.max(0, Math.round(t * 1000)));
+            const physState = precalculatedPhysicsData[lookupIndex];
+            if (!physState) return;
 
-            const impact = getAdvancedNumber('impactStrength') *
-                Math.pow(Math.max(0, speed) / 200, getAdvancedNumber('speedCurve'));
-            const puckX = CENTER_X + (progress * impact * 160);
-            const puckY = CENTER_Y + ROD_LENGTH * 0.86;
+            // Don't draw the puck until the swing is approaching it
+            if (physState.angularPos > 135) return;
+
+            const puckX = physState.puckX;
+            const puckY = physState.puckY;
             const radius = 12;
 
             ctx.beginPath();
