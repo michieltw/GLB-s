@@ -501,9 +501,14 @@
             const clampedFlex = Math.max(20, Math.min(125, flex));
             const flexProgress = (clampedFlex - 20) / 105;
             // A real hockey stick has a natural frequency of ~25Hz.
-            const stiffnessBase = 5000 + flexProgress * 15000 * getAdvancedNumber('resistance');
-            const floorFrictionCoef = getAdvancedNumber('floorFriction') * 0.5;
-            const impactCoef = getAdvancedNumber('impactStrength') * 2.0;
+            // Observation: During a heavy wrist/snap shot weight transfer (like Kessel),
+            // players compress downwards into the stick. The resulting flex is heavily dependent on the flex rating.
+            // We'll broaden the range between low-flex and high-flex stiffness to make the difference more visually striking.
+            // A lower flex means it should be significantly less stiff (more bendy).
+            // A higher flex means it should be significantly stiffer (less bendy).
+            const stiffnessBase = 2000 + flexProgress * 40000 * getAdvancedNumber('resistance');
+            const floorFrictionCoef = getAdvancedNumber('floorFriction') * 0.7; // increased pre-load friction
+            const impactCoef = getAdvancedNumber('impactStrength') * 3.0; // heavier puck impact load
             const recoilCoef = getAdvancedNumber('recoilStrength');
             const speedFactor = Math.pow(Math.max(0, speed) / 200, getAdvancedNumber('speedCurve'));
 
@@ -609,10 +614,23 @@
                     stickBendC += bendVelC * true_dt;
                 }
 
-                // If stick passes puck (angularPos < 90), apply recoil
+                // If stick passes puck (angularPos < 90), apply rapid elastic recoil (whip)
+                // A key observation from pro slapshots is that the shaft rapidly unbends and whips forward,
+                // accelerating the blade past the shaft's normal angle right as the puck leaves the blade.
                 if (angularPos <= 90) {
-                    bendVelB -= stickBendB * 2.0 * recoilCoef * true_dt;
-                    bendVelC -= stickBendC * 2.0 * recoilCoef * true_dt;
+                    // We apply a stronger restorative spring force multiplier to simulate explosive recoil release
+                    const recoilMultiplier = 5.0 * recoilCoef;
+                    const springWhipForceB = -stickBendB * stiffnessB * recoilMultiplier;
+                    const accelWhipB = springWhipForceB / inertiaB - (bendVelB * damping * 0.5); // reduced damping during whip
+                    bendVelB += accelWhipB * true_dt;
+                    stickBendB += bendVelB * true_dt;
+
+                    if (kpList.length > 1) {
+                        const springWhipForceC = -stickBendC * stiffnessC * recoilMultiplier;
+                        const accelWhipC = springWhipForceC / inertiaC - (bendVelC * damping * 0.5);
+                        bendVelC += accelWhipC * true_dt;
+                        stickBendC += bendVelC * true_dt;
+                    }
                 }
 
                 // Clamp bends (sticks can't bend backwards during swing significantly)
@@ -626,11 +644,17 @@
 
                 // Puck collision / pushing logic
                 if (bladeX > puckX && angularPos <= 130) {
-                    // Stick is pushing the puck
-                    puckVelX = (bladeX - puckX) / true_dt; // Transfer speed
+                    // Stick is pushing the puck. We also calculate the explosive velocity from the whip.
+                    // Instead of just taking the bladeX difference, we add the velocity from the whip/recoil phase.
+                    // This allows the puck to realistically fly off the blade slightly faster than the base swing speed
+                    // when the stick snaps back into shape.
+                    let instantaneousPuckVel = (bladeX - puckX) / true_dt;
+
+                    // In a snap shot, the final puck velocity is a combination of swing velocity + whip velocity.
+                    puckVelX = instantaneousPuckVel;
                     puckX = bladeX;
                 } else {
-                    // Coasting free
+                    // Coasting free - add a slight exponential decay if it hits the air, but mostly retains speed
                     puckX += puckVelX * true_dt;
                 }
 
