@@ -292,6 +292,26 @@
         const ctx = canvas.getContext('2d');
         const tooltip = document.getElementById('dragTooltip');
 
+        function resize() {
+            // Set canvas size dynamically
+            const container = document.getElementById('canvas-container');
+            if (container) {
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+            } else {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight * 0.55; // Guess fallback
+            }
+            CENTER_X = canvas.width / 2;
+            CENTER_Y = 150; // Set pivot point to 15% from top
+
+            // Recompute physics based on new centers just in case
+            precalculatePhysics();
+            draw();
+        }
+        window.addEventListener('resize', resize);
+
+
         const timeSlider = document.getElementById('timeSlider');
         const speedSlider = document.getElementById('speedSlider');
         const unitToggle = document.getElementById('unitToggle');
@@ -353,8 +373,8 @@
 
         // Basis instellingen (worden live geschaald door de Pan/Zoom logic)
         const ROD_LENGTH = 380;
-        const CENTER_X = canvas.width / 2;
-        const CENTER_Y = 40;
+        let CENTER_X = window.innerWidth / 2;
+        let CENTER_Y = 40;
         const SEGMENTS = 50;
 
         // Maximum local bend before snapping. Softer sticks bend farther before breaking.
@@ -1283,9 +1303,10 @@
         });
 
         updateAdvancedValueLabels();
-        precalculatePhysics();
+        resize();
 
         // Start initieel direct 1.3x ingezoomd, dat vult het scherm prachtig op
+        resize();
         doZoom(1.3);
 
     </script>
